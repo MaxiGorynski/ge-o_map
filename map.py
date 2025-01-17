@@ -1,64 +1,85 @@
 import geopandas as gpd
-import pandas as pd
-import os
+import matplotlib.pyplot as plt
+from lxml import etree
+from shapely.geometry import Polygon
 
-# Paths
-csv_folder = "/Users/supriyarai/Code/ge-o_map/Scotland_Census-2022-Output-Area"
-gml_file = "CEN2022_OA.xml"
 
-# Load GeoDataFrame
-geodata = gpd.read_file(gml_file)
+# Function to parse XML and extract polygons
+def parse_xml(xml_file):
+    # Parse the XML file
+    tree = etree.parse(xml_file)
+    root = tree.getroot()
 
-# Inspect for duplicate columns
-if geodata.columns.duplicated().any():
-    print("Duplicate columns detected in GeoDataFrame:")
-    print(geodata.columns[geodata.columns.duplicated()])
-    # Remove duplicate columns
-    geodata = geodata.loc[:, ~geodata.columns.duplicated()]
+    # Namespace mapping for easier parsing
+    namespaces = {
+        'gml': 'http://www.opengis.net/gml',
+        'CEN2022': 'maps.gov.scot'
+    }
 
-# Rename the correct 'CEN2022:code' column to 'code' if it exists
-if 'CEN2022:code' in geodata.columns:
-    geodata.rename(columns={"CEN2022:code": "code"}, inplace=True)
+    # List to hold data
+    data = []
 
-# Handle duplicate rows based on the 'code' column
-if geodata['code'].duplicated().any():
-    print("Duplicate 'code' values detected in GeoDataFrame. Removing duplicates...")
-    geodata = geodata.drop_duplicates(subset='code')
+    # Iterate through each feature in the XML
+    for feature in root.xpath('//gml:featureMember', namespaces=namespaces):
+        # Extract relevant fields
+        code = feature.xpath('.//CEN2022:code/text()', namespaces=namespaces)[0]
+        popcount = feature.xpath('.//CEN2022:Popcount/text()', namespaces=namespaces)[0]
+        hhcount = feature.xpath('.//CEN2022:HHcount/text()', namespaces=namespaces)[0]
 
-# Verify final GeoDataFrame structure
-print("GeoDataFrame after cleanup:")
-print(geodata.head())
-print(geodata.columns)
+        # Extract geometry
+        pos_list = feature.xpath('.//gml:posList/text()', namespaces=namespaces)
 
-# CSV Processing
-for file in os.listdir(csv_folder):
-    if file.endswith(".csv"):
-        file_path = os.path.join(csv_folder, file)
+        # Check if pos_list is not empty and contains valid data
+        if pos_list:
+            coords = []
+            # Split the posList string into individual coordinates
+            coord_pairs = pos_list[0].split()
+            for i in range(0, len(coord_pairs), 2):  # Process pairs of coordinates (lon, lat)
+                try:
+                    lon = float(coord_pairs[i])  # Longitude
+                    lat = float(coord_pairs[i + 1])  # Latitude
+                    coords.append((lon, lat))
+                except ValueError:
+                    print(f"Invalid coordinate pair: {coord_pairs[i]}, {coord_pairs[i + 1]}. Skipping...")
 
-        # Load CSV with error handling
-        census_data = pd.read_csv(file_path, on_bad_lines='skip', header=0)
-        print(f"Processing file: {file}")
-        print(f"Initial rows in {file}:")
-        print(census_data.head())
+            # Create a Polygon from the coordinates if there are valid ones
+            if coords:
+                polygon = Polygon(coords)
+                # Append data
+                data.append({
+                    'code': code,
+                    'popcount': popcount,
+                    'hhcount': hhcount,
+                    'geometry': polygon
+                })
+        else:
+            print(f"No valid posList found for code {code}. Skipping...")
 
-        # Rename the first column to 'code'
-        census_data.rename(columns={census_data.columns[0]: 'code'}, inplace=True)
+    # Convert to GeoDataFrame
+    geo_df = gpd.GeoDataFrame(data)
 
-        # Remove duplicate columns and rows
-        census_data = census_data.loc[:, ~census_data.columns.duplicated()]
-        if census_data['code'].duplicated().any():
-            print(f"Duplicate 'code' values found in {file}. Removing duplicates...")
-            census_data = census_data.drop_duplicates(subset='code')
+    # Check if data contains valid geometries
+    if not geo_df.empty and geo_df.geometry.isna().sum() == 0:
+        # Set the CRS to EPSG:27700 (British National Grid)
+        geo_df.set_crs('EPSG:27700', allow_override=True, inplace=True)
+    else:
+        print("Error: No valid geometries found.")
 
-        # Merge data into GeoDataFrame
-        print(f"Merging data from {file} with GeoDataFrame...")
-        geodata = geodata.merge(census_data, how="left", on="code")
+    # Return GeoDataFrame
+    return geo_df
 
-# Verify final merged GeoDataFrame
-print("Final GeoDataFrame after merging with CSVs:")
-print(geodata.head())
 
-# Save the result
-output_file = "cleaned_geodata.gpkg"
-geodata.to_file(output_file, driver="GPKG")
-print(f"Cleaned and merged GeoDataFrame saved to {output_file}.")
+# Path to your XML file
+xml_file = "/Users/supriyarai/Code/ge-o_map/CEN2022_OA.xml"
+
+# Parse the XML and convert it to GeoDataFrame
+geo_df = parse_xml(xml_file)
+
+# If the GeoDataFrame is not empty, plot the data
+if not geo_df.empty:
+    geo_df.set_geometry('geometry', inplace=True)  # Explicitly set the geometry column
+    geo_df.plot(column='popcount', cmap='Oranges', legend=True)
+    plt.title('Population Count by Area')
+    plt.show()
+else:
+    print("GeoDataFrame is empty or contains no valid data.")
