@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 from matplotlib.widgets import Button, Slider
 
 # Filepaths
-tif_file = "GBOverview.tif"
+tif_file = "/Users/supriyarai/Code/ge-o_map/Over_gb/GBOverview.tif"
 gml_file = "/Users/supriyarai/Code/ge-o_map/bdline_gml3_gb/Data/INSPIRE_AdministrativeUnit.gml"
 
 # Initialize zoom level
