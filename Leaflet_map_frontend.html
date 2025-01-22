@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UK Map with Census Data</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        #map {
+            height: 100vh;
+        }
+
+        .layer-control-group {
+            position: absolute;
+            right: 10px;
+            background: white;
+            border-radius: 4px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+            padding: 5px;
+            max-height: 300px;
+            overflow-y: auto;
+            z-index: 1000;
+            top: 10px; /* Fixed position on the right */
+        }
+
+        .layer-control-header {
+            font-weight: bold;
+            text-align: center;
+        }
+
+        .layer-control-layers {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        .layer-control-layers label {
+            cursor: pointer;
+        }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        // Initialize the map
+        const map = L.map('map').setView([55.3781, -3.4360], 6);
+
+        // Add a tile layer
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+            attribution: '© OpenStreetMap contributors'
+        }).addTo(map);
+
+        // Load the JSON data
+        fetch('map_data.json')
+            .then(response => response.json())
+            .then(data => {
+                // Create feature groups
+                const allPeopleGroup = L.layerGroup();
+                const people0To4Group = L.layerGroup();
+                const people5To9Group = L.layerGroup();
+                const maleGroup = L.layerGroup();
+
+                // Add markers to the feature groups
+                data.forEach(item => {
+                    // Marker for "All People"
+                    L.circleMarker([item.latitude, item.longitude], {
+                        radius: 5,
+                        color: 'blue',
+                        fillColor: 'blue',
+                        fillOpacity: 0.7
+                    }).bindPopup(`
+                        <strong>OA Code:</strong> ${item.oa_code}<br>
+                        <strong>Number of People:</strong> ${item.all_people}
+                    `).addTo(allPeopleGroup);
+
+                    // Marker for "All People, 0-4"
+                    L.circleMarker([item.latitude, item.longitude], {
+                        radius: 5,
+                        color: 'cyan',
+                        fillColor: 'cyan',
+                        fillOpacity: 0.7
+                    }).bindPopup(`
+                        <strong>OA Code:</strong> ${item.oa_code}<br>
+                        <strong>All People (0-4):</strong> ${item.all_people_0_4}
+                    `).addTo(people0To4Group);
+
+                    // Marker for "All People, 5-9"
+                    L.circleMarker([item.latitude, item.longitude], {
+                        radius: 5,
+                        color: 'purple',
+                        fillColor: 'purple',
+                        fillOpacity: 0.7
+                    }).bindPopup(`
+                        <strong>OA Code:</strong> ${item.oa_code}<br>
+                        <strong>All People (5-9):</strong> ${item.all_people_5_9}
+                    `).addTo(people5To9Group);
+
+                    // Marker for "Male, All"
+                    L.circleMarker([item.latitude, item.longitude], {
+                        radius: 5,
+                        color: 'green',
+                        fillColor: 'green',
+                        fillOpacity: 0.7
+                    }).bindPopup(`
+                        <strong>OA Code:</strong> ${item.oa_code}<br>
+                        <strong>Male, All:</strong> ${item.male_all}
+                    `).addTo(maleGroup);
+                });
+
+                // All datasets in one list
+                const layers = {
+                    "Number of People (All)": allPeopleGroup,
+                    "All People (0-4)": people0To4Group,
+                    "All People (5-9)": people5To9Group,
+                    "Male, All": maleGroup
+                };
+
+                // Create a layer control list without grouping
+                const controlContainer = L.DomUtil.create('div', 'layer-control-group');
+                const controlHeader = L.DomUtil.create('div', 'layer-control-header', controlContainer);
+                controlHeader.innerHTML = 'Select Datasets';
+
+                const layersList = L.DomUtil.create('div', 'layer-control-layers', controlContainer);
+
+                Object.keys(layers).forEach(name => {
+                    const input = document.createElement('input');
+                    input.type = 'checkbox';
+                    input.checked = true; // Default to checked
+                    input.onchange = () => {
+                        if (input.checked) {
+                            map.addLayer(layers[name]);
+                        } else {
+                            map.removeLayer(layers[name]);
+                        }
+                    };
+
+                    const label = document.createElement('label');
+                    label.appendChild(input);
+                    label.appendChild(document.createTextNode(name));
+
+                    layersList.appendChild(label);
+                    layersList.appendChild(document.createElement('br'));
+
+                    // Initially add all layers
+                    map.addLayer(layers[name]);
+                });
+
+                // Append the control container to the map
+                map.getContainer().appendChild(controlContainer);
+            })
+            .catch(error => console.error("Error loading data:", error));
+    </script>
+</body>
+</html>

@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UK Map with Census Data</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        #map {
+            height: 100vh;
+        }
+
+        /* Container for the control group */
+        .layer-control-group {
+            position: absolute;
+            right: 10px;
+            background: white;
+            border-radius: 4px;
+            box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+            padding: 10px;
+            z-index: 1000;
+        }
+
+        .layer-control-group:first-of-type {
+            top: 10px;
+        }
+
+        .layer-control-group:nth-of-type(2) {
+            top: 250px;
+        }
+
+        /* Header style for dropdowns */
+        .layer-control-header {
+            font-weight: bold;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        /* Style for the nested drop-down */
+        .nested-dropdown {
+            display: none;
+            margin-top: 10px;
+            padding-left: 15px;
+        }
+
+        .layer-control-header span {
+            color: red;
+            cursor: pointer;
+        }
+
+        /* Show the nested dropdown when active */
+        .layer-control-header.active + .nested-dropdown {
+            display: block;
+        }
+
+        .layer-control-layers {
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="map"></div>
+
+    <div class="layer-control-group">
+        <!-- Stats Dropdown -->
+        <div class="layer-control-header" onclick="toggleDropdown('stats')">
+            Stats
+            <span>+</span>
+        </div>
+        <div id="stats" class="nested-dropdown">
+            <!-- Sex and Age, All Dropdown -->
+            <div class="layer-control-header" onclick="toggleDropdown('all')">
+                Sex and Age, All
+                <span>+</span>
+            </div>
+            <div id="all" class="nested-dropdown">
+                <!-- Add your groups (allPeopleGroup, etc.) here -->
+                <div class="layer-control-layers">
+                    <label><input type="checkbox" id="all_people" /> All People</label><br />
+                    <label><input type="checkbox" id="age_0_4" /> Age 0-4</label><br />
+                    <label><input type="checkbox" id="age_5_9" /> Age 5-9</label><br />
+                </div>
+            </div>
+
+            <!-- Sex and Age, Male Dropdown -->
+            <div class="layer-control-header" onclick="toggleDropdown('male')">
+                Sex and Age, Male
+                <span>+</span>
+            </div>
+            <div id="male" class="nested-dropdown">
+                <!-- Add your male group here -->
+                <div class="layer-control-layers">
+                    <label><input type="checkbox" id="male_group" /> Male</label><br />
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        // Initialize the map
+        var map = L.map('map').setView([55.3781, -3.4360], 6); // UK center point
+
+        // Add a base tile layer
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+        }).addTo(map);
+
+        // Sample geoJSON data for different groups (replace with your actual data)
+        var allPeopleData = {
+            "type": "FeatureCollection",
+            "features": [
+                {
+                    "type": "Feature",
+                    "geometry": { "type": "Point", "coordinates": [-3.4360, 55.3781] },
+                    "properties": { "name": "All People Group" }
+                }
+            ]
+        };
+
+        var age0_4Data = {
+            "type": "FeatureCollection",
+            "features": [
+                {
+                    "type": "Feature",
+                    "geometry": { "type": "Point", "coordinates": [-3.5, 55.378] },
+                    "properties": { "name": "Age 0-4 Group" }
+                }
+            ]
+        };
+
+        var maleGroupData = {
+            "type": "FeatureCollection",
+            "features": [
+                {
+                    "type": "Feature",
+                    "geometry": { "type": "Point", "coordinates": [-3.5, 55.5] },
+                    "properties": { "name": "Male Group" }
+                }
+            ]
+        };
+
+        // Initialize the layers for each data group
+        var allPeopleLayer = L.geoJSON(allPeopleData).addTo(map);
+        var age0_4Layer = L.geoJSON(age0_4Data).addTo(map);
+        var maleGroupLayer = L.geoJSON(maleGroupData).addTo(map);
+
+        // Remove layers initially
+        allPeopleLayer.remove();
+        age0_4Layer.remove();
+        maleGroupLayer.remove();
+
+        // Function to toggle nested dropdown
+        function toggleDropdown(id) {
+            var element = document.getElementById(id);
+            var span = element.previousElementSibling.querySelector('span');
+
+            if (element.style.display === 'block') {
+                element.style.display = 'none';
+                span.textContent = '+';
+            } else {
+                element.style.display = 'block';
+                span.textContent = '-';
+            }
+        }
+
+        // Event listeners for checkboxes
+        document.getElementById('all_people').addEventListener('change', function(e) {
+            if (e.target.checked) {
+                allPeopleLayer.addTo(map);
+            } else {
+                allPeopleLayer.remove();
+            }
+        });
+
+        document.getElementById('age_0_4').addEventListener('change', function(e) {
+            if (e.target.checked) {
+                age0_4Layer.addTo(map);
+            } else {
+                age0_4Layer.remove();
+            }
+        });
+
+        document.getElementById('male_group').addEventListener('change', function(e) {
+            if (e.target.checked) {
+                maleGroupLayer.addTo(map);
+            } else {
+                maleGroupLayer.remove();
+            }
+        });
+    </script>
+
+</body>
+</html>
