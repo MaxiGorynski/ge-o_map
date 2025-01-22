@@ -1,100 +1,34 @@
-import geopandas as gpd
 import pandas as pd
-import os
-from shapely.validation import make_valid
+import folium
 
-# Paths
-csv_folder = "/Users/supriyarai/Code/ge-o_map/Scotland_Census-2022-Output-Area"
-gml_file = "CEN2022_OA.xml"
+# Load the CSV file
+csv_file = "/Users/supriyarai/Code/ge-o_map/Scotland_Census-2022-OA-Modded/UV102b - Age (20) by sex - Basic_with_EPSG27700.csv"
+data = pd.read_csv(csv_file)
 
-# Load GeoDataFrame
-geodata = gpd.read_file(gml_file)
+# Extract the required columns
+oa_code = data['OA_Code']
+latitude = data['Latitude']
+longitude = data['Longitude']
+all_people = data['All people']
 
-#Initialise GeoDataFrame
-geo_df = gpd.GeoDataFrame()
+# Create a folium map centered on the UK
+uk_map = folium.Map(location=[55.3781, -3.4360], zoom_start=6)
 
-# Inspect for duplicate columns
-if geodata.columns.duplicated().any():
-    print("Duplicate columns detected in GeoDataFrame:")
-    print(geodata.columns[geodata.columns.duplicated()])
-    # Remove duplicate columns
-    geodata = geodata.loc[:, ~geodata.columns.duplicated()]
+# Add individual dots with popups for each data point
+for oa, lat, lon, people in zip(oa_code, latitude, longitude, all_people):
+    if not pd.isnull(lat) and not pd.isnull(lon):
+        folium.CircleMarker(
+            location=[lat, lon],
+            radius=5,  # Size of the dot
+            color='blue',
+            fill=True,
+            fill_color='blue',
+            fill_opacity=0.7,
+            popup=folium.Popup(f"OA_Code: {oa}<br>All people: {people}", max_width=300)
+        ).add_to(uk_map)
 
-# Rename the correct 'CEN2022:code' column to 'code' if it exists
-if 'CEN2022:code' in geodata.columns:
-    geodata.rename(columns={"CEN2022:code": "code"}, inplace=True)
+# Save the map to an HTML file
+map_file = "uk_heatmap.html"
+uk_map.save(map_file)
 
-# Handle duplicate rows based on the 'code' column
-if geodata['code'].duplicated().any():
-    print("Duplicate 'code' values detected in GeoDataFrame. Removing duplicates...")
-    geodata = geodata.drop_duplicates(subset='code')
-
-# Verify final GeoDataFrame structure
-#print("GeoDataFrame after cleanup:")
-#print(geodata.head())
-#print(geodata.columns)
-
-# CSV Processing
-for file in os.listdir(csv_folder):
-    if file.endswith(".csv"):
-        file_path = os.path.join(csv_folder, file)
-
-        # Load CSV with error handling
-        census_data = pd.read_csv(
-            file_path,
-            dtype={
-                "code": str, #All codes treated as stringns
-                "OBJECTID": int,
-            },
-            on_bad_lines='skip', header=0,
-            low_memory=False
-        )
-        print(f"Processing file: {file}")
-        print(f"Initial rows in {file}:")
-        print(census_data.head())
-
-        # Rename the first column to 'code'
-        census_data.rename(columns={census_data.columns[0]: 'code'}, inplace=True)
-
-        # Remove duplicate columns and rows
-        census_data = census_data.loc[:, ~census_data.columns.duplicated()]
-        if census_data['code'].duplicated().any():
-            print(f"Duplicate 'code' values found in {file}. Removing duplicates...")
-            census_data = census_data.drop_duplicates(subset='code')
-
-        # Detect missing data, validate key columns in current file, and skip if critical info missing
-        print(f"Missing data in {file}:")
-        print(census_data.isnull().sum())
-        if census_data[['code']].isnull().any().any():
-            print(f"Critical missing data found in {file}. Skipping file.")
-            continue  # Skip this file if critical data is missing
-        geo_df = geo_df.merge(census_data, on="code", how="left")  # Perform the merge
-
-        # Example: Filling or dropping missing data
-        census_data = census_data.fillna(0)  # Replace all NaNs with 0
-
-        # Merge data into GeoDataFrame
-        print(f"Merging data from {file} with GeoDataFrame...")
-        geodata = geodata.merge(census_data, how="left", on="code")
-
-#Verify the final merged frame
-print("Missing data in final merged GeoDataFrame:")
-print(geo_df.isnull().sum())  # Check for missing values post-merge
-
-#Handle remaining missing data in GeoDataFrame
-# Option 1: Replace missing values
-geo_df['Popcount'] = geo_df['Popcount'].fillna(0)  # Replace NaN with 0
-geo_df['HHcount'] = geo_df['HHcount'].fillna(geo_df['HHcount'].mean())  # Fill with mean
-
-#Validate geometry
-geo_df['geometry'] = geo_df['geometry'].apply(make_valid) #Fixes invalid geometries
-print("Invalid geometries after merging:", geo_df[~geo_df.is_valid])
-
-# Verify final merged GeoDataFrame
-print("Final GeoDataFrame after merging with CSVs:")
-print(geodata.head())
-
-# Save the result
-output_file = "cleaned_geodata.gpkg"
-geodata.to_file(output_file, driver="GPKG")
-print(f"Cleaned and merged GeoDataFrame saved to {output_file}.")
+print(f"Heatmap saved to {map_file}")
