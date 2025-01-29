@@ -2,7 +2,7 @@ import pandas as pd
 import json
 
 # Filepath
-csv_file = "/Users/supriyarai/Code/ge-o_map/Scotland_Census-2022-OA-Modded/Scotland Census 22 - UV102b - Age (20) by sex - UV102b - Age (20) by sex.csv"
+csv_file = "/Users/supriyarai/Code/ge-o_map/Scotland_Census-2022-Output-Area-Full/UV102b - Age (20) by sex.csv"
 
 # Load the CSV data
 data = pd.read_csv(csv_file)

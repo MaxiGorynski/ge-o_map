@@ -1,0 +1,94 @@
+Backend Plan for Dynamic Dataset Switching
+1. Set Up a RESTful API
+Use a backend framework like Flask (Python), FastAPI (Python), or Express.js (Node.js) to serve data dynamically.
+
+Endpoints:
+GET /datasets - Returns a list of available datasets and their metadata.
+GET /data?dataset=<name> - Fetches the requested dataset (filtered or unfiltered).
+Optional: POST /filter - Allows users to send additional filters (e.g., geographic bounds, time periods).
+2. Database Structure
+Store the census data in a database to support efficient querying. Use a relational database (e.g., MySQL, PostgreSQL) or a spatial database (e.g., PostGIS, MongoDB with GeoJSON) for geographic data.
+
+Example Schema:
+datasets table:
+
+id: Unique identifier for each dataset.
+name: Human-readable name (e.g., "All People 0-4").
+description: Short description of the dataset.
+filename: File path or database table name where the dataset is stored.
+bounds: Optional GeoJSON/coordinates for spatial extent of the data.
+census_data table (one table per dataset, or a unified table with types):
+
+id: Unique ID.
+oa_code: Output Area code.
+latitude: Latitude of the area.
+longitude: Longitude of the area.
+attribute: Attribute name (e.g., "all_people_0_4").
+value: Attribute value (e.g., 120).
+Spatial Database Advantages:
+Use PostGIS to store geospatial data and perform spatial queries (e.g., find data within specific geographic bounds).
+3. API Logic for Dynamic Data
+Serve only the selected datasets and apply optional filters.
+Flow for /data?dataset=<name>:
+Input Validation:
+
+Check if the requested dataset exists in the datasets table.
+Validate filters like bounding box, OA code, or specific columns.
+Data Query:
+
+Fetch data from the database or a preprocessed file (e.g., GeoJSON, CSV, or Parquet).
+If spatial filters are applied, query only data within the specified bounds.
+Response:
+
+Send data as a GeoJSON or JSON object for easy rendering on the front end.
+Example Response:
+json
+Copy
+Edit
+[
+    {
+        "oa_code": "S12345",
+        "latitude": 55.95,
+        "longitude": -3.19,
+        "all_people_0_4": 120
+    },
+    {
+        "oa_code": "S67890",
+        "latitude": 55.87,
+        "longitude": -4.25,
+        "all_people_0_4": 98
+    }
+]
+4. Serve Preprocessed Data
+For performance:
+
+Preprocess datasets into smaller chunks (e.g., by geographic area or dataset type) and cache results for faster response.
+Use libraries like Pandas or Dask (Python) for processing large CSV/Parquet files before serving them.
+5. Client-Backend Communication
+Example Workflow:
+The client sends a GET request to /datasets to retrieve available datasets.
+The user toggles a dataset, triggering a GET /data?dataset=<name> request to fetch only the relevant data.
+The backend sends filtered data back to the client for rendering on the map.
+6. Optional Enhancements
+a. Real-Time Filters:
+Allow users to filter data dynamically:
+
+By geographic bounds (e.g., bounding box around the current map view).
+By demographic ranges (e.g., age range or gender).
+API Endpoint: POST /filter.
+b. Caching:
+Use a caching mechanism (e.g., Redis) to cache frequently requested datasets or filters for faster response times.
+
+c. Pagination:
+For large datasets, paginate the API responses:
+
+Use query parameters like ?page=1&limit=1000 to serve data in chunks.
+7. Tech Stack Recommendations
+Framework: Flask or FastAPI for Python.
+Database: PostgreSQL with PostGIS for spatial queries or MongoDB with GeoJSON.
+Cache: Redis or a similar caching layer.
+Testing Tools: Postman or cURL for API testing.
+8. Next Steps
+Build the /datasets and /data endpoints.
+Preload census data into a database or preprocess files for faster access.
+Update the front end to fetch datasets dynamically based on API responses.
