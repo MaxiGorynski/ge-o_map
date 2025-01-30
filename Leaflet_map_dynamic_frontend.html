@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UK Map with Census Data</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        body {
+            margin: 0;
+            display: flex;
+            height: 100vh;
+        }
+
+        #controls {
+            width: 30%; /* Left panel width */
+            background: #f8f9fa;
+            padding: 20px;
+            overflow-y: auto;
+            border-right: 2px solid #ddd;
+            box-sizing: border-box;
+        }
+
+        #controls h2 {
+            font-size: 18px;
+            margin-bottom: 15px;
+            text-align: center;
+        }
+
+        #controls .layer-control {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+
+        #controls label {
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            gap: 5px;
+        }
+
+        #controls input[type="checkbox"] {
+            margin: 0;
+        }
+
+        #map {
+            height: 100vh;
+            width: calc(100% - 200px); /* Adjust width to account for the left panel */
+            position: absolute;
+            left: 200px; /* Matches the width of the left panel */
+            top: 0;
+        }
+
+        #left-panel {
+            width: 200px;
+            position: absolute;
+            left: 0;
+            top: 0;
+            bottom: 0;
+            overflow-y: auto;
+            background-color: #f8f9fa;
+            padding: 10px;
+            box-shadow: 2px 0 5px rgba(0, 0, 0, 0.1);
+        }
+
+        .dropdown-content {
+            margin: 10px 0;
+        }
+
+        details {
+          margin-bottom: 10px;
+        }
+
+        details summary {
+          font-weight: bold;
+          cursor: pointer;
+          padding: 5px;
+          background-color: #f1f1f1;
+          border: 1px solid #ddd;
+          border-radius: 5px;
+        }
+
+        .details .dropdown-content {
+          margin-top: 5px;
+          padding-left: 10px;
+        }
+
+        label {
+          display: block;
+          margin-bottom: 5px;
+        }
+
+    </style>
+</head>
+<body>
+    <!-- Left panel for toggles -->
+    <div id="left-panel">
+    <!-- Dropdown for "All People" -->
+        <details>
+            <summary>All People</summary>
+            <div class="dropdown-content">
+                <label>
+                    <input type="checkbox" id="toggle-all-people" data-dataset="all_people" checked>
+                    Number of People (All)
+                </label>
+                <label>
+                    <input type="checkbox" id="toggle-all-people-0-4" data-dataset="all_people_0_4" checked>
+                    All People (0-4)
+                </label>
+                <label>
+                    <input type="checkbox" id="toggle-all-people-5-9" data-dataset="all_people_5_9" checked>
+                    All People (5-9)
+                </label>
+            </div>
+        </details>
+
+        <!-- Dropdown for "Male Only" -->
+        <details>
+            <summary>Male Only</summary>
+            <div class="dropdown-content">
+                <label>
+                    <input type="checkbox" id="toggle-male-all" data-dataset="male_all" checked>
+                    Male, All
+                </label>
+            </div>
+        </details>
+    </div>
+    <div id>"dataset-controls"</div>
+    <div id="map"></div>
+
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        // Initialize the map
+        const map = L.map('map').setView([55.3781, -3.4360], 6);
+
+        // Add a tile layer
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+            attribution: '© OpenStreetMap contributors'
+        }).addTo(map);
+
+        // Load the JSON data
+        fetch('map_data.json')
+            .then(response => response.json())
+            .then(data => {
+                console.log("Loaded data:", data);
+                // Create feature groups
+                const allPeopleGroup = L.layerGroup();
+                const people0To4Group = L.layerGroup();
+                const people5To9Group = L.layerGroup();
+                const maleGroup = L.layerGroup();
+
+                // Add markers to the feature groups
+                data.forEach(item => {
+                    console.log("Processing item:", item);
+                    L.circleMarker([item.latitude, item.longitude], {
+                        radius: 5,
+                        color: 'blue',
+                        fillColor: 'blue',
+                        fillOpacity: 0.7
+                    }).bindPopup(`
+                        <strong>OA Code:</strong> ${item.oa_code}<br>
+                        <strong>Number of People:</strong> ${item.all_people}
+                    `).addTo(allPeopleGroup);
+
+                    L.circleMarker([item.latitude, item.longitude], {
+                        radius: 5,
+                        color: 'cyan',
+                        fillColor: 'cyan',
+                        fillOpacity: 0.7
+                    }).bindPopup(`
+                        <strong>OA Code:</strong> ${item.oa_code}<br>
+                        <strong>All People (0-4):</strong> ${item.all_people_0_4}
+                    `).addTo(people0To4Group);
+
+                    L.circleMarker([item.latitude, item.longitude], {
+                        radius: 5,
+                        color: 'purple',
+                        fillColor: 'purple',
+                        fillOpacity: 0.7
+                    }).bindPopup(`
+                        <strong>OA Code:</strong> ${item.oa_code}<br>
+                        <strong>All People (5-9):</strong> ${item.all_people_5_9}
+                    `).addTo(people5To9Group);
+
+                    L.circleMarker([item.latitude, item.longitude], {
+                        radius: 5,
+                        color: 'green',
+                        fillColor: 'green',
+                        fillOpacity: 0.7
+                    }).bindPopup(`
+                        <strong>OA Code:</strong> ${item.oa_code}<br>
+                        <strong>Male, All:</strong> ${item.male_all}
+                    `).addTo(maleGroup);
+                })
+                .catch(error => console.error("Error loading data:", error));
+
+                // All datasets in one list
+                const layers = {
+                    "Number of People (All)": allPeopleGroup,
+                    "All People (0-4)": people0To4Group,
+                    "All People (5-9)": people5To9Group,
+                    "Male, All": maleGroup
+                };
+
+                // Populate the control panel
+                const layerControl = document.getElementById('layerControl');
+                Object.keys(layers).forEach(name => {
+                    const checkbox = document.createElement('input');
+                    checkbox.type = 'checkbox';
+                    checkbox.checked = true; // Default to checked
+                    checkbox.onchange = () => {
+                        if (checkbox.checked) {
+                            map.addLayer(layers[name]);
+                        } else {
+                            map.removeLayer(layers[name]);
+                        }
+                    };
+
+                    const label = document.createElement('label');
+                    label.appendChild(checkbox);
+                    label.appendChild(document.createTextNode(name));
+
+                    layerControl.appendChild(label);
+                });
+
+                // Add all layers initially
+                Object.values(layers).forEach(layer => map.addLayer(layer));
+            })
+            .catch(error => console.error("Error loading data:", error));
+
+        // Add a tile layer
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            maxZoom: 19,
+            attribution: '© OpenStreetMap contributors'
+        }).addTo(map);
+
+        // Load the JSON data
+        fetch('map_data.json')
+            .then(response => response.json())
+            .then(data => {
+                // Create feature groups for the map layers
+                const layers = {
+                    all_people: L.layerGroup(),
+                    all_people_0_4: L.layerGroup(),
+                    all_people_5_9: L.layerGroup(),
+                    male_all: L.layerGroup()
+                };
+
+                // Populate each layer group with data
+                data.forEach(item => {
+                    console.log("Processing item:", item);
+                    L.circleMarker([item.latitude, item.longitude], {
+                        radius: 5,
+                        color: 'blue',
+                        fillColor: 'blue',
+                        fillOpacity: 0.7
+                    }).bindPopup(`
+                        <strong>OA Code:</strong> ${item.oa_code}<br>
+                        <strong>Number of People:</strong> ${item.all_people}
+                    `).addTo(layers.all_people);
+
+                    L.circleMarker([item.latitude, item.longitude], {
+                        radius: 5,
+                        color: 'cyan',
+                        fillColor: 'cyan',
+                        fillOpacity: 0.7
+                    }).bindPopup(`
+                        <strong>OA Code:</strong> ${item.oa_code}<br>
+                        <strong>All People (0-4):</strong> ${item.all_people_0_4}
+                    `).addTo(layers.all_people_0_4);
+
+                    L.circleMarker([item.latitude, item.longitude], {
+                        radius: 5,
+                        color: 'purple',
+                        fillColor: 'purple',
+                        fillOpacity: 0.7
+                    }).bindPopup(`
+                        <strong>OA Code:</strong> ${item.oa_code}<br>
+                        <strong>All People (5-9):</strong> ${item.all_people_5_9}
+                    `).addTo(layers.all_people_5_9);
+
+                    L.circleMarker([item.latitude, item.longitude], {
+                        radius: 5,
+                        color: 'green',
+                        fillColor: 'green',
+                        fillOpacity: 0.7
+                    }).bindPopup(`
+                        <strong>OA Code:</strong> ${item.oa_code}<br>
+                        <strong>Male, All:</strong> ${item.male_all}
+                    `).addTo(layers.male_all);
+                });
+
+                // Handle dropdown toggle interactions
+                const toggles = document.querySelectorAll("input[type='checkbox']");
+                toggles.forEach(toggle => {
+                    toggle.addEventListener("change", function () {
+                        const dataset = toggle.dataset.dataset;
+                        if (this.checked) {
+                            map.addLayer(layers[dataset]);
+                        } else {
+                            map.removeLayer(layers[dataset]);
+                        }
+                    });
+                });
+
+                // Initially add all layers to the map
+                Object.values(layers).forEach(layer => map.addLayer(layer));
+            })
+            .catch(error => console.error("Error loading data:", error));
+
+
+
+        function fetchDataset(dataset) {
+            console.log(`Fetching dataset: ${dataset}`);
+            // Replace with API call or dataset rendering logic
+        }
+
+        function removeDataset(dataset) {
+            console.log(`Removing dataset: ${dataset}`);
+            // Replace with map-clearing logic
+        }
+    </script>
+</body>
+</html>
