@@ -2,9 +2,30 @@
 <html lang="en">
 <head>
     <style>
+        /* Main container should use flex to layout the sidebar and map */
+        .container {
+            display: flex;
+            height: 100vh; /* Full height of the viewport */
+        }
+
+        /* Sidebar for dynamic dropdowns, fixed width */
+        .sidebar {
+            width: 250px; /* You can adjust this width */
+            overflow-y: auto;
+            background-color: #f4f4f4;
+            padding: 10px;
+        }
+
+        /* Map container should take the remaining space */
+        .map-container {
+            flex-grow: 1; /* Makes the map container fill the remaining space */
+            height: 100%; /* Ensure it takes the full height */
+        }
+
+        /* Map element should fill the available space */
         #map {
-            height: 100vh;
-            width: 100%;
+            height: 100%; /* Full height */
+            width: 100%; /* Full width of the container */
         }
     </style>
     <meta charset="UTF-8">
@@ -15,7 +36,15 @@
     <script defer src="script.js"></script>  <!-- Load our script.js -->
 </head>
 <body>
-    <div id="data-controls"></div>  <!-- Dynamic dropdowns go here -->
-    <div id="map"></div>
+    <div class="container">
+        <!-- Sidebar for the dynamic dropdowns -->
+        <div class="sidebar">
+            <div id="data-controls"></div> <!-- Dynamic dropdowns go here -->
+        </div>
+        <!-- Map container -->
+        <div class="map-container">
+            <div id="map"></div> <!-- Map element -->
+        </div>
+    </div>
 </body>
 </html>

@@ -2,7 +2,7 @@
 
 // Ensure this script runs AFTER the DOM is loaded
 document.addEventListener("DOMContentLoaded", () => {
-    loadDataset("http://localhost:8000/Map_JSON/output.UV102b_Age_by_Sex.json");
+    loadDataset("http://localhost:8000/Map_JSON/output.UV101b_Usual_Resident_Population_By_Age_and_Sex.json");
     initializeMap();
 });
 
@@ -14,7 +14,7 @@ async function loadDataset(jsonFile) {
         const data = await response.json();
 
         // Ensure the dataset control container exists
-        const controlsContainer = document.getElementById("dataset-controls");
+        const controlsContainer = document.getElementById("data-controls");
         if (!controlsContainer) {
             console.error("Element #dataset-controls not found in DOM.");
             return;
@@ -64,12 +64,16 @@ async function loadDataset(jsonFile) {
                 label.appendChild(checkbox);
                 label.appendChild(document.createTextNode(dataset));
 
-                dropdown.appendChild(label);
+                // Wrap each label and checkbox in a div to ensure a line break
+                const wrapper = document.createElement("div");
+                wrapper.appendChild(label);
+                dropdown.appendChild(wrapper); // Add wrapper to dropdown content
             });
 
             details.appendChild(dropdown);
             controlsContainer.appendChild(details);
         });
+
     } catch (error) {
         console.error("Error loading dataset:", error);
     }
@@ -82,6 +86,7 @@ function groupHeaders(headers) {
     headers.forEach(header => {
         let category = "Other";
 
+        // Categorize "All People", "Male Only", "Female Only"
         if (header.toLowerCase().includes("all people")) category = "All People";
         else if (header.toLowerCase().includes("male")) category = "Male Only";
         else if (header.toLowerCase().includes("female")) category = "Female Only";
@@ -93,6 +98,7 @@ function groupHeaders(headers) {
     return groups;
 }
 
+
 // Initialize Leaflet Map
 function initializeMap() {
     const map = L.map('map').setView([55.3781, -3.4360], 6);
@@ -102,13 +108,11 @@ function initializeMap() {
         attribution: '© OpenStreetMap contributors'
     }).addTo(map);
 
-    fetch("http://localhost:8000/Map_JSON/output.UV101b_Usual_Resident_Population_by_Sex_and_Age.json")
+    fetch("http://localhost:8000/Map_JSON/output.UV101b_Usual_Resident_Population_By_Age_and_Sex.json")
         .then(response => response.json())
         .then(data => {
             const layerGroups = {};
-            const datasetMapping = {};
 
-            // Add each data entry to a map layer dynamically
             data.forEach(entry => {
                 const lat = parseFloat(entry.Latitude);
                 const lon = parseFloat(entry.Longitude);
@@ -118,14 +122,15 @@ function initializeMap() {
                     return;
                 }
 
-                // Create a marker for each location
                 const marker = L.circleMarker([lat, lon], {
                     radius: 5,
                     color: 'blue'
                 });
 
+                marker.entry = entry; // Store the dataset entry on the marker
                 marker.bindPopup(`OA Code: ${entry.OA_Code}`);
 
+                // Add marker to all relevant layer groups
                 Object.keys(entry).forEach(key => {
                     if (key !== "OA_Code" && key !== "Latitude" && key !== "Longitude") {
                         if (!layerGroups[key]) {
@@ -137,12 +142,11 @@ function initializeMap() {
             });
 
             // Add layer control to map
-            let layerControl = L.control.layers(null, layerGroups, { collapsed: false }).addTo(map);
+            //L.control.layers(null, layerGroups, { collapsed: false }).addTo(map);
 
-            // Add event listeners to checkboxes
+            // Handle checkbox toggles for layers
             document.querySelectorAll("input[type='checkbox']").forEach(checkbox => {
                 let key = checkbox.dataset.dataset;
-                datasetMapping[key] = checkbox;
 
                 checkbox.addEventListener('change', () => {
                     if (checkbox.checked) {
@@ -151,6 +155,41 @@ function initializeMap() {
                         map.removeLayer(layerGroups[key]);
                     }
                 });
+            });
+
+            // Dynamically update popups based on active toggles
+            map.on('popupopen', function (e) {
+                const marker = e.popup._source;
+                const entry = marker.entry;
+
+                let popupContent = `OA Code: ${entry.OA_Code}<br>`;
+
+                document.querySelectorAll("input[type='checkbox']:checked").forEach(checkbox => {
+                    let datasetKey = checkbox.dataset.dataset;
+                    if (entry.hasOwnProperty(datasetKey)) {
+                        popupContent += `${datasetKey}: ${entry[datasetKey]}<br>`;
+                    }
+                });
+
+                marker.setPopupContent(popupContent);
+            });
+
+           // Dynamically update popups based on active toggles
+            map.on('popupopen', function (e) {
+                const marker = e.popup._source;
+                const entry = marker.entry;
+
+                let popupContent = `OA Code: ${entry.OA_Code}<br>`;
+
+                // Loop through all checked checkboxes and display their corresponding data values
+                document.querySelectorAll("input[type='checkbox']:checked").forEach(checkbox => {
+                    let datasetKey = checkbox.dataset.dataset;
+                    if (entry.hasOwnProperty(datasetKey)) {
+                        popupContent += `${datasetKey}: ${entry[datasetKey]}<br>`;
+                    }
+                });
+
+                marker.setPopupContent(popupContent);
             });
         })
         .catch(error => console.error("Error loading map data:", error));

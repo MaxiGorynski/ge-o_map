@@ -1,4 +1,7 @@
 # Ignore the GML file
 bdline_gml3_gb/Data/INSPIRE_AdministrativeUnit.gml
+/Users/supriyarai/Code/ge-o_map/Map_JSON/output.UV101b_Usual_Resident_Population_By_Age_and_Sex.json
+/Users/supriyarai/Code/ge-o_map/Map_JSON/output.UV102b_Age_by_Sex.json
+/Users/supriyarai/Code/ge-o_map/Map_JSON/output.UV103_Age_by_Single_Year.json
 
 Map_JSON/*.json
