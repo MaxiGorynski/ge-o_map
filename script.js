@@ -1,31 +1,49 @@
-//Load JSON and generate UI dynamically based on JSON
+// Start a local server first if needed (e.g., python3 -m http.server 8000)
 
+// Ensure this script runs AFTER the DOM is loaded
+document.addEventListener("DOMContentLoaded", () => {
+    loadDataset("http://localhost:8000/Map_JSON/output.UV101b_Usual_Resident_Population_by_Sex_and_Age.json");
+    initializeMap();
+});
+
+// Function to dynamically load datasets
 async function loadDataset(jsonFile) {
     try {
         const response = await fetch(jsonFile);
+        if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
         const data = await response.json();
 
-        //Clear existing dataset controls
-        const controlsContainer = document.getElementById("dataset-controls");
+        // Ensure the dataset control container exists
+        const controlsContainer = document.getElementById("data-controls");
+        if (!controlsContainer) {
+            console.error("Element #dataset-controls not found in DOM.");
+            return;
+        }
+
         controlsContainer.innerHTML = ""; // Reset UI
 
-        //Extract headers/keys from JSON object
-        const headers = Object.keys(data[0].filter(key => key !== "oa_code" && key !== "latitude" && key !== "longitude");
+        if (!Array.isArray(data) || data.length === 0) {
+            console.error("Invalid dataset format: Expected an array of objects.");
+            return;
+        }
 
-        //Group headers by category
-        const groupedHeaders = groupedHeaders(headers)
+        // Extract dataset keys dynamically
+        const headers = Object.keys(data[0]).filter(
+            key => key !== "OA_Code" && key !== "Latitude" && key !== "Longitude"
+        );
 
-        //Generate dropdowns dynamically
+        const groupedHeaders = groupHeaders(headers);
+
+        // Populate UI dynamically
         Object.keys(groupedHeaders).forEach(category => {
             const details = document.createElement("details");
             const summary = document.createElement("summary");
-            summary.textContent = category; // Set category name
+            summary.textContent = category;
             details.appendChild(summary);
 
             const dropdown = document.createElement("div");
             dropdown.classList.add("dropdown-content");
 
-            //Create checkboxes for each dataset
             groupedHeaders[category].forEach(dataset => {
                 const label = document.createElement("label");
                 const checkbox = document.createElement("input");
@@ -33,7 +51,15 @@ async function loadDataset(jsonFile) {
                 checkbox.type = "checkbox";
                 checkbox.id = `toggle-${dataset.replace(/\s+/g, "-").toLowerCase()}`;
                 checkbox.setAttribute("data-dataset", dataset);
-                checkbox.checked = true;
+                checkbox.checked = false;
+
+                checkbox.addEventListener("change", () => {
+                    if (checkbox.checked) {
+                        fetchDataset(dataset);
+                    } else {
+                        removeDataset(dataset);
+                    }
+                });
 
                 label.appendChild(checkbox);
                 label.appendChild(document.createTextNode(dataset));
@@ -49,7 +75,7 @@ async function loadDataset(jsonFile) {
     }
 }
 
-//Function for grouping headers by category
+// Function to group dataset headers
 function groupHeaders(headers) {
     const groups = {};
 
@@ -67,199 +93,100 @@ function groupHeaders(headers) {
     return groups;
 }
 
-//Load default dataset on page load
-document.addEventListener("DOMContentLoaded", () => {
-    loadDataset("default_dataset.json");
-});
+// Initialize Leaflet Map
+function initializeMap() {
+    const map = L.map('map').setView([55.3781, -3.4360], 6);
 
-// Initialize the map
-        const map = L.map('map').setView([55.3781, -3.4360], 6);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom: 19,
+        attribution: '© OpenStreetMap contributors'
+    }).addTo(map);
 
-        // Add a tile layer
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            maxZoom: 19,
-            attribution: '© OpenStreetMap contributors'
-        }).addTo(map);
+    fetch("http://localhost:8000/Map_JSON/output.UV101b_Usual_Resident_Population_by_Sex_and_Age.json")
+        .then(response => response.json())
+        .then(data => {
+            const layerGroups = {};
+            const datasetMapping = {};
 
-        // Load the JSON data
-        fetch('map_data.json')
-            .then(response => response.json())
-            .then(data => {
-                console.log("Loaded data:", data);
-                // Create feature groups
-                const allPeopleGroup = L.layerGroup();
-                const people0To4Group = L.layerGroup();
-                const people5To9Group = L.layerGroup();
-                const maleGroup = L.layerGroup();
+            // Add each data entry to a map layer dynamically
+            data.forEach(entry => {
+                const lat = parseFloat(entry.Latitude);
+                const lon = parseFloat(entry.Longitude);
 
-                // Add markers to the feature groups
-                data.forEach(item => {
-                    console.log("Processing item:", item);
-                    L.circleMarker([item.latitude, item.longitude], {
-                        radius: 5,
-                        color: 'blue',
-                        fillColor: 'blue',
-                        fillOpacity: 0.7
-                    }).bindPopup(`
-                        <strong>OA Code:</strong> ${item.oa_code}<br>
-                        <strong>Number of People:</strong> ${item.all_people}
-                    `).addTo(allPeopleGroup);
+                if (isNaN(lat) || isNaN(lon)) {
+                    console.warn("Skipping entry with invalid coordinates:", entry);
+                    return;
+                }
 
-                    L.circleMarker([item.latitude, item.longitude], {
-                        radius: 5,
-                        color: 'cyan',
-                        fillColor: 'cyan',
-                        fillOpacity: 0.7
-                    }).bindPopup(`
-                        <strong>OA Code:</strong> ${item.oa_code}<br>
-                        <strong>All People (0-4):</strong> ${item.all_people_0_4}
-                    `).addTo(people0To4Group);
+                // Create a marker for each location
+                const marker = L.circleMarker([lat, lon], {
+                    radius: 5,
+                    color: 'blue'
+                });
 
-                    L.circleMarker([item.latitude, item.longitude], {
-                        radius: 5,
-                        color: 'purple',
-                        fillColor: 'purple',
-                        fillOpacity: 0.7
-                    }).bindPopup(`
-                        <strong>OA Code:</strong> ${item.oa_code}<br>
-                        <strong>All People (5-9):</strong> ${item.all_people_5_9}
-                    `).addTo(people5To9Group);
+                let popupContent = `OA Code: ${entry.OA_Code}<br>`;
 
-                    L.circleMarker([item.latitude, item.longitude], {
-                        radius: 5,
-                        color: 'green',
-                        fillColor: 'green',
-                        fillOpacity: 0.7
-                    }).bindPopup(`
-                        <strong>OA Code:</strong> ${item.oa_code}<br>
-                        <strong>Male, All:</strong> ${item.male_all}
-                    `).addTo(maleGroup);
-                })
-                .catch(error => console.error("Error loading data:", error));
+                Object.keys(entry).forEach(key => {
+                    if (key !== "OA_Code" && key !== "Latitude" && key !== "Longitude") {
+                        popupContent += `${key}: ${entry[key]}<br>`;
+                    }
+                });
 
-                // All datasets in one list
-                const layers = {
-                    "Number of People (All)": allPeopleGroup,
-                    "All People (0-4)": people0To4Group,
-                    "All People (5-9)": people5To9Group,
-                    "Male, All": maleGroup
-                };
+                marker.bindPopup(popupContent);
 
-                // Populate the control panel
-                const layerControl = document.getElementById('layerControl');
-                Object.keys(layers).forEach(name => {
-                    const checkbox = document.createElement('input');
-                    checkbox.type = 'checkbox';
-                    checkbox.checked = true; // Default to checked
-                    checkbox.onchange = () => {
-                        if (checkbox.checked) {
-                            map.addLayer(layers[name]);
-                        } else {
-                            map.removeLayer(layers[name]);
+                //Add market to appropriate layer group
+                Object.keys(entry).forEach(key =>{
+                    if (key !== "OA_Code" && key !== "Latitude" && key !== "Longitude") {
+                        if (!layerGroups[key]) {
+                            layerGroups[key] = L.layerGroup();
                         }
-                    };
+                        layerGroups[key].addLayer(marker);
+                    }
+                })
+            });
 
-                    const label = document.createElement('label');
-                    label.appendChild(checkbox);
-                    label.appendChild(document.createTextNode(name));
+            // Add layer control to map
+            let layerControl = L.control.layers(null, layerGroups, { collapsed: false }).addTo(map);
 
-                    layerControl.appendChild(label);
-                });
+            // Add event listeners to checkboxes
+            document.querySelectorAll("input[type='checkbox']").forEach(checkbox => {
+                let key = checkbox.dataset.dataset;
+                datasetMapping[key] = checkbox;
 
-                // Add all layers initially
-                Object.values(layers).forEach(layer => map.addLayer(layer));
-            })
-            .catch(error => console.error("Error loading data:", error));
+                checkbox.addEventListener('change', () => {
+                    // Update the popup content based on selected checkboxes
+                    data.forEach(entry => {
+                        let popupContent = `OA Code: ${entry.OA_Code}<br>`;
 
-        // Add a tile layer
-        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            maxZoom: 19,
-            attribution: '© OpenStreetMap contributors'
-        }).addTo(map);
+                        // Add the dataset value associated with the checkbox to the popup
+                        if (checkbox.checked) {
+                            // Display the relevant dataset value in the popup
+                            popupContent += `${key}: ${entry[key]}<br>`;
+                        }
 
-        // Load the JSON data
-        fetch('map_data.json')
-            .then(response => response.json())
-            .then(data => {
-                // Create feature groups for the map layers
-                const layers = {
-                    all_people: L.layerGroup(),
-                    all_people_0_4: L.layerGroup(),
-                    all_people_5_9: L.layerGroup(),
-                    male_all: L.layerGroup()
-                };
-
-                // Populate each layer group with data
-                data.forEach(item => {
-                    console.log("Processing item:", item);
-                    L.circleMarker([item.latitude, item.longitude], {
-                        radius: 5,
-                        color: 'blue',
-                        fillColor: 'blue',
-                        fillOpacity: 0.7
-                    }).bindPopup(`
-                        <strong>OA Code:</strong> ${item.oa_code}<br>
-                        <strong>Number of People:</strong> ${item.all_people}
-                    `).addTo(layers.all_people);
-
-                    L.circleMarker([item.latitude, item.longitude], {
-                        radius: 5,
-                        color: 'cyan',
-                        fillColor: 'cyan',
-                        fillOpacity: 0.7
-                    }).bindPopup(`
-                        <strong>OA Code:</strong> ${item.oa_code}<br>
-                        <strong>All People (0-4):</strong> ${item.all_people_0_4}
-                    `).addTo(layers.all_people_0_4);
-
-                    L.circleMarker([item.latitude, item.longitude], {
-                        radius: 5,
-                        color: 'purple',
-                        fillColor: 'purple',
-                        fillOpacity: 0.7
-                    }).bindPopup(`
-                        <strong>OA Code:</strong> ${item.oa_code}<br>
-                        <strong>All People (5-9):</strong> ${item.all_people_5_9}
-                    `).addTo(layers.all_people_5_9);
-
-                    L.circleMarker([item.latitude, item.longitude], {
-                        radius: 5,
-                        color: 'green',
-                        fillColor: 'green',
-                        fillOpacity: 0.7
-                    }).bindPopup(`
-                        <strong>OA Code:</strong> ${item.oa_code}<br>
-                        <strong>Male, All:</strong> ${item.male_all}
-                    `).addTo(layers.male_all);
-                });
-
-                // Handle dropdown toggle interactions
-                const toggles = document.querySelectorAll("input[type='checkbox']");
-                toggles.forEach(toggle => {
-                    toggle.addEventListener("change", function () {
-                        const dataset = toggle.dataset.dataset;
-                        if (this.checked) {
-                            map.addLayer(layers[dataset]);
-                        } else {
-                            map.removeLayer(layers[dataset]);
+                        // Update the marker popup content
+                        const marker = layerGroups[key].getLayers().find(layer => layer._latlng.lat === entry.Latitude && layer._latlng.lng === entry.Longitude);
+                        if (marker) {
+                            marker.setPopupContent(popupContent);
                         }
                     });
+
+                    if (checkbox.checked) {
+                        map.addLayer(layerGroups[key]);
+                    } else {
+                        map.removeLayer(layerGroups[key]);
+                    }
                 });
-
-                // Initially add all layers to the map
-                Object.values(layers).forEach(layer => map.addLayer(layer));
             })
-            .catch(error => console.error("Error loading data:", error));
+        })
+        .catch(error => console.error("Error loading map data:", error));
+}
 
+// Functions to handle dataset toggling
+function fetchDataset(dataset) {
+    console.log(`Fetching dataset: ${dataset}`);
+}
 
-
-        function fetchDataset(dataset) {
-            console.log(`Fetching dataset: ${dataset}`);
-            // Replace with API call or dataset rendering logic
-        }
-
-        function removeDataset(dataset) {
-            console.log(`Removing dataset: ${dataset}`);
-            // Replace with map-clearing logic
-        }
-
+function removeDataset(dataset) {
+    console.log(`Removing dataset: ${dataset}`);
+}

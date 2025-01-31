@@ -20,7 +20,7 @@ params = {
     "version": "1.1.0",
     "outputFormat": "text/xml; subtype=gml/3.1.1",
     "typeName": "CEN2022:OutputArea2022",
-    "startIndex": 42000,
+    "startIndex": 0,
     "maxFeatures": 1000,
 }
 
