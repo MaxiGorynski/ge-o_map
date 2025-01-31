@@ -101,6 +101,11 @@ function groupHeaders(headers) {
         // Debugging log to check category assignment
         console.log(`Assigned category: ${category}`);
 
+        // If category is still "Other", check if it contains female-related terms to assign it to "Female Only"
+        if (category === "Other" && header.toLowerCase().includes("female")) {
+            category = "Female Only";
+        }
+
         if (!groups[category]) groups[category] = [];
         groups[category].push(header);
     });
@@ -110,9 +115,6 @@ function groupHeaders(headers) {
 
     return groups;
 }
-
-
-
 
 // Initialize Leaflet Map
 function initializeMap() {
