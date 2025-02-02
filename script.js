@@ -2,7 +2,7 @@
 
 // Ensure this script runs AFTER the DOM is loaded
 document.addEventListener("DOMContentLoaded", () => {
-    loadDataset("http://localhost:8000/Map_JSON/output.UV101b_Usual_Resident_Population_By_Age_and_Sex.json");
+    loadDataset("http://localhost:8000/Map_JSON/output.UV103_Age_by_Single_Year.json");
     initializeMap();
 });
 
@@ -125,9 +125,21 @@ function initializeMap() {
         attribution: '© OpenStreetMap contributors'
     }).addTo(map);
 
-    fetch("http://localhost:8000/Map_JSON/output.UV101b_Usual_Resident_Population_By_Age_and_Sex.json")
-        .then(response => response.json())
+    const datasetUrl = "http://localhost:8000/Map_JSON/output.UV103_Age_by_Single_Year.json"
+    const datasetTitleMatch = datasetUrl.match(/output\.(.*?\.json/))
+    const datasetTitle = datasetTitleMatch ? datasetTitleMatch[1].replace(/_/g, " ") : "Unknown Dataset";
+
+    const datasetTitleContainer = document.getElementById("dataset-title");
+    if (datasetTitleContainer) {
+        datasetTitleContainer.textContent = `Dataset: ${datasetTitle`};
+
+    fetch("http://localhost:8000/Map_JSON/output.UV103_Age_by_Single_Year.json?nocache=${Date.now()}")
+        .then(response => {
+            console.log("Fetch request sent");
+        return response.json();
+        })
         .then(data => {
+            console.log("Data successfully fetched", data.length, "entries received");
             const layerGroups = {};
 
             data.forEach(entry => {
@@ -151,6 +163,7 @@ function initializeMap() {
                 Object.keys(entry).forEach(key => {
                     if (key !== "OA_Code" && key !== "Latitude" && key !== "Longitude") {
                         if (!layerGroups[key]) {
+                            console.warn(`Layer group for ${key} does not exist. Creating...`)
                             layerGroups[key] = L.layerGroup();
                         }
                         layerGroups[key].addLayer(marker);
