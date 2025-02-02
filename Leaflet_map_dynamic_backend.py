@@ -2,7 +2,7 @@ import pandas as pd
 import json
 import os
 
-csv_file = "/Users/supriyarai/Code/ge-o_map/Scotland_Census-2022-Output-Area-Full/UV102b - Age (20) by sex (Full Geo).csv"
+csv_file = "/Users/supriyarai/Code/ge-o_map/Scotland_Census-2022-Output-Area-Full/UV103 - Age by single year (Full Geo).csv"
 data = pd.read_csv(csv_file)
 
 # Convert NaN to None (handles missing values properly)
@@ -19,7 +19,7 @@ output_folder = "/Users/supriyarai/Code/ge-o_map/Map_JSON"
 os.makedirs(output_folder, exist_ok=True)
 
 # Specify JSON filename and destination
-json_file = os.path.join(output_folder, f"output.UV102b_Age_by_Sex.json")
+json_file = os.path.join(output_folder, f"output.UV103_Age_by_Year.json")
 
 # Save cleaned JSON data to file
 with open(json_file, "w", encoding="utf-8") as f:

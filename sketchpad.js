@@ -2,7 +2,7 @@
 
 // Ensure this script runs AFTER the DOM is loaded
 document.addEventListener("DOMContentLoaded", () => {
-    loadDataset("http://localhost:8000/Map_JSON/output.UV101b_Usual_Resident_Population_By_Age_and_Sex.json");
+    loadDataset("http://localhost:8000/Map_JSON/output.UV103_Age_by_Single_Year.json");
     initializeMap();
 });
 
@@ -86,18 +86,35 @@ function groupHeaders(headers) {
     headers.forEach(header => {
         let category = "Other";
 
+        // Debugging log to check the dataset names
+        console.log(`Checking header: ${header}`);
+
         // Categorize "All People", "Male Only", "Female Only"
-        if (header.toLowerCase().includes("all people")) category = "All People";
-        else if (header.toLowerCase().includes("male")) category = "Male Only";
-        else if (header.toLowerCase().includes("female")) category = "Female Only";
+        if (header.toLowerCase().includes("all people")) {
+            category = "All People";
+        } else if (header.toLowerCase().includes("male") && !header.toLowerCase().includes("female")) {
+            category = "Male Only";
+        } else if (header.toLowerCase().includes("female") && !header.toLowerCase().includes("male")) {
+            category = "Female Only";
+        }
+
+        // Debugging log to check category assignment
+        console.log(`Assigned category: ${category}`);
+
+        // If category is still "Other", check if it contains female-related terms to assign it to "Female Only"
+        if (category === "Other" && header.toLowerCase().includes("female")) {
+            category = "Female Only";
+        }
 
         if (!groups[category]) groups[category] = [];
         groups[category].push(header);
     });
 
+    // Debugging log to check the final groups
+    console.log('Grouped headers:', groups);
+
     return groups;
 }
-
 
 // Initialize Leaflet Map
 function initializeMap() {
@@ -108,9 +125,13 @@ function initializeMap() {
         attribution: '© OpenStreetMap contributors'
     }).addTo(map);
 
-    fetch("http://localhost:8000/Map_JSON/output.UV101b_Usual_Resident_Population_By_Age_and_Sex.json")
-        .then(response => response.json())
+    fetch("http://localhost:8000/Map_JSON/output.UV103_Age_by_Single_Year.json")
+        .then(response => {
+            console.log("Fetch request sent");
+            return response.json();
+        })
         .then(data => {
+            console.log("Data successfully fetched", data.length, "entries received");
             const layerGroups = {};
 
             data.forEach(entry => {
@@ -134,6 +155,7 @@ function initializeMap() {
                 Object.keys(entry).forEach(key => {
                     if (key !== "OA_Code" && key !== "Latitude" && key !== "Longitude") {
                         if (!layerGroups[key]) {
+                            console.warn(`Layer group for ${key} does not exist. Creating...`)
                             layerGroups[key] = L.layerGroup();
                         }
                         layerGroups[key].addLayer(marker);
@@ -157,42 +179,30 @@ function initializeMap() {
                 });
             });
 
-            // Dynamically update popups based on active toggles
-            map.on('popupopen', function (e) {
-                const marker = e.popup._source;
-                const entry = marker.entry;
-
-                let popupContent = `OA Code: ${entry.OA_Code}<br>`;
-
-                document.querySelectorAll("input[type='checkbox']:checked").forEach(checkbox => {
-                    let datasetKey = checkbox.dataset.dataset;
-                    if (entry.hasOwnProperty(datasetKey)) {
-                        popupContent += `${datasetKey}: ${entry[datasetKey]}<br>`;
-                    }
-                });
-
-                marker.setPopupContent(popupContent);
-            });
-
-           // Dynamically update popups based on active toggles
-            map.on('popupopen', function (e) {
-                const marker = e.popup._source;
-                const entry = marker.entry;
-
-                let popupContent = `OA Code: ${entry.OA_Code}<br>`;
-
-                // Loop through all checked checkboxes and display their corresponding data values
-                document.querySelectorAll("input[type='checkbox']:checked").forEach(checkbox => {
-                    let datasetKey = checkbox.dataset.dataset;
-                    if (entry.hasOwnProperty(datasetKey)) {
-                        popupContent += `${datasetKey}: ${entry[datasetKey]}<br>`;
-                    }
-                });
-
-                marker.setPopupContent(popupContent);
-            });
+            // Final check after 5 seconds to ensure layers persist
+            setTimeout(() => console.log("Layer groups after 5s:", Object.keys(layerGroups)), 5000);
         })
-        .catch(error => console.error("Error loading map data:", error));
+        .catch(error => {
+            console.error("Error fetching dataset:", error);
+        });
+
+    // Dynamically update popups based on active toggles
+    map.on('popupopen', function (e) {
+        const marker = e.popup._source;
+        const entry = marker.entry;
+
+        let popupContent = `OA Code: ${entry.OA_Code}<br>`;
+
+        document.querySelectorAll("input[type='checkbox']:checked").forEach(checkbox => {
+            let datasetKey = checkbox.dataset.dataset;
+            if (entry.hasOwnProperty(datasetKey)) {
+                popupContent += `${datasetKey}: ${entry[datasetKey]}<br>`;
+            }
+        });
+
+        marker.setPopupContent(popupContent);
+    });
+
 }
 
 // Functions to handle dataset toggling

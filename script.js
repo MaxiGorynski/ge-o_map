@@ -1,10 +1,46 @@
-// Start a local server first if needed (e.g., python3 -m http.server 8000)
-
-// Ensure this script runs AFTER the DOM is loaded
-document.addEventListener("DOMContentLoaded", () => {
-    loadDataset("http://localhost:8000/Map_JSON/output.UV103_Age_by_Single_Year.json");
+document.addEventListener("DOMContentLoaded", async () => {
+    await populateDatasetList();
     initializeMap();
 });
+
+// Function to get available datasets dynamically
+async function populateDatasetList() {
+    await new Promise(resolve => setTimeout(resolve, 500)); // Delay in case the element loads late
+
+    const datasetList = document.getElementById("dataset-list");
+    if (!datasetList) {
+        console.error("Element #dataset-list not found in DOM after waiting.");
+        return;
+    }
+
+    try {
+        const response = await fetch("http://localhost:8000/Map_JSON/");
+        if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
+
+        const parser = new DOMParser();
+        const htmlDoc = parser.parseFromString(await response.text(), "text/html");
+        const links = [...htmlDoc.querySelectorAll("a[href$='.json']")];
+
+        const datasetList = document.getElementById("dataset-list");
+        if (!datasetList) {
+            console.error("Element #dataset-list not found in DOM.");
+            return;
+        }
+        datasetList.innerHTML = "";
+
+        links.forEach(link => {
+            const datasetName = link.textContent;
+            const datasetUrl = `http://localhost:8000/Map_JSON/${datasetName}`;
+
+            const button = document.createElement("button");
+            button.textContent = datasetName;
+            button.addEventListener("click", () => loadDataset(datasetUrl));
+            datasetList.appendChild(button);
+        });
+    } catch (error) {
+        console.error("Error fetching dataset list:", error);
+    }
+}
 
 // Function to dynamically load datasets
 async function loadDataset(jsonFile) {
@@ -13,28 +49,25 @@ async function loadDataset(jsonFile) {
         if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
         const data = await response.json();
 
-        // Ensure the dataset control container exists
         const controlsContainer = document.getElementById("data-controls");
         if (!controlsContainer) {
-            console.error("Element #dataset-controls not found in DOM.");
+            console.error("Element #data-controls not found in DOM.");
             return;
         }
 
-        controlsContainer.innerHTML = ""; // Reset UI
+        controlsContainer.innerHTML = "";
 
         if (!Array.isArray(data) || data.length === 0) {
             console.error("Invalid dataset format: Expected an array of objects.");
             return;
         }
 
-        // Extract dataset keys dynamically
         const headers = Object.keys(data[0]).filter(
             key => key !== "OA_Code" && key !== "Latitude" && key !== "Longitude"
         );
 
         const groupedHeaders = groupHeaders(headers);
 
-        // Populate UI dynamically
         Object.keys(groupedHeaders).forEach(category => {
             const details = document.createElement("details");
             const summary = document.createElement("summary");
@@ -64,16 +97,14 @@ async function loadDataset(jsonFile) {
                 label.appendChild(checkbox);
                 label.appendChild(document.createTextNode(dataset));
 
-                // Wrap each label and checkbox in a div to ensure a line break
                 const wrapper = document.createElement("div");
                 wrapper.appendChild(label);
-                dropdown.appendChild(wrapper); // Add wrapper to dropdown content
+                dropdown.appendChild(wrapper);
             });
 
             details.appendChild(dropdown);
             controlsContainer.appendChild(details);
         });
-
     } catch (error) {
         console.error("Error loading dataset:", error);
     }
@@ -86,10 +117,8 @@ function groupHeaders(headers) {
     headers.forEach(header => {
         let category = "Other";
 
-        // Debugging log to check the dataset names
         console.log(`Checking header: ${header}`);
 
-        // Categorize "All People", "Male Only", "Female Only"
         if (header.toLowerCase().includes("all people")) {
             category = "All People";
         } else if (header.toLowerCase().includes("male") && !header.toLowerCase().includes("female")) {
@@ -98,10 +127,8 @@ function groupHeaders(headers) {
             category = "Female Only";
         }
 
-        // Debugging log to check category assignment
         console.log(`Assigned category: ${category}`);
 
-        // If category is still "Other", check if it contains female-related terms to assign it to "Female Only"
         if (category === "Other" && header.toLowerCase().includes("female")) {
             category = "Female Only";
         }
@@ -110,7 +137,6 @@ function groupHeaders(headers) {
         groups[category].push(header);
     });
 
-    // Debugging log to check the final groups
     console.log('Grouped headers:', groups);
 
     return groups;
@@ -125,104 +151,37 @@ function initializeMap() {
         attribution: '© OpenStreetMap contributors'
     }).addTo(map);
 
-    const datasetUrl = "http://localhost:8000/Map_JSON/output.UV103_Age_by_Single_Year.json"
-    const datasetTitleMatch = datasetUrl.match(/output\.(.*?\.json/))
-    const datasetTitle = datasetTitleMatch ? datasetTitleMatch[1].replace(/_/g, " ") : "Unknown Dataset";
-
-    const datasetTitleContainer = document.getElementById("dataset-title");
-    if (datasetTitleContainer) {
-        datasetTitleContainer.textContent = `Dataset: ${datasetTitle`};
-
-    fetch("http://localhost:8000/Map_JSON/output.UV103_Age_by_Single_Year.json?nocache=${Date.now()}")
-        .then(response => {
-            console.log("Fetch request sent");
-        return response.json();
-        })
+    fetch("http://localhost:8000/Map_JSON/output.UV103_Age_by_Single_Year.json")
+        .then(response => response.json())
         .then(data => {
-            console.log("Data successfully fetched", data.length, "entries received");
             const layerGroups = {};
 
             data.forEach(entry => {
                 const lat = parseFloat(entry.Latitude);
                 const lon = parseFloat(entry.Longitude);
 
-                if (isNaN(lat) || isNaN(lon)) {
-                    console.warn("Skipping entry with invalid coordinates:", entry);
-                    return;
-                }
+                if (isNaN(lat) || isNaN(lon)) return;
 
-                const marker = L.circleMarker([lat, lon], {
-                    radius: 5,
-                    color: 'blue'
-                });
-
-                marker.entry = entry; // Store the dataset entry on the marker
+                const marker = L.circleMarker([lat, lon], { radius: 5, color: 'blue' });
+                marker.entry = entry;
                 marker.bindPopup(`OA Code: ${entry.OA_Code}`);
 
-                // Add marker to all relevant layer groups
                 Object.keys(entry).forEach(key => {
-                    if (key !== "OA_Code" && key !== "Latitude" && key !== "Longitude") {
-                        if (!layerGroups[key]) {
-                            console.warn(`Layer group for ${key} does not exist. Creating...`)
-                            layerGroups[key] = L.layerGroup();
-                        }
+                    if (!["OA_Code", "Latitude", "Longitude"].includes(key)) {
+                        if (!layerGroups[key]) layerGroups[key] = L.layerGroup();
                         layerGroups[key].addLayer(marker);
                     }
                 });
             });
 
-            // Add layer control to map
-            //L.control.layers(null, layerGroups, { collapsed: false }).addTo(map);
-
-            // Handle checkbox toggles for layers
             document.querySelectorAll("input[type='checkbox']").forEach(checkbox => {
                 let key = checkbox.dataset.dataset;
-
                 checkbox.addEventListener('change', () => {
-                    if (checkbox.checked) {
-                        map.addLayer(layerGroups[key]);
-                    } else {
-                        map.removeLayer(layerGroups[key]);
-                    }
+                    checkbox.checked ? map.addLayer(layerGroups[key]) : map.removeLayer(layerGroups[key]);
                 });
-            });
-
-            // Dynamically update popups based on active toggles
-            map.on('popupopen', function (e) {
-                const marker = e.popup._source;
-                const entry = marker.entry;
-
-                let popupContent = `OA Code: ${entry.OA_Code}<br>`;
-
-                document.querySelectorAll("input[type='checkbox']:checked").forEach(checkbox => {
-                    let datasetKey = checkbox.dataset.dataset;
-                    if (entry.hasOwnProperty(datasetKey)) {
-                        popupContent += `${datasetKey}: ${entry[datasetKey]}<br>`;
-                    }
-                });
-
-                marker.setPopupContent(popupContent);
-            });
-
-           // Dynamically update popups based on active toggles
-            map.on('popupopen', function (e) {
-                const marker = e.popup._source;
-                const entry = marker.entry;
-
-                let popupContent = `OA Code: ${entry.OA_Code}<br>`;
-
-                // Loop through all checked checkboxes and display their corresponding data values
-                document.querySelectorAll("input[type='checkbox']:checked").forEach(checkbox => {
-                    let datasetKey = checkbox.dataset.dataset;
-                    if (entry.hasOwnProperty(datasetKey)) {
-                        popupContent += `${datasetKey}: ${entry[datasetKey]}<br>`;
-                    }
-                });
-
-                marker.setPopupContent(popupContent);
             });
         })
-        .catch(error => console.error("Error loading map data:", error));
+        .catch(error => console.error("Error fetching dataset:", error));
 }
 
 // Functions to handle dataset toggling
