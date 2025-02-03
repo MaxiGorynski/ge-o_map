@@ -3,16 +3,26 @@ document.addEventListener("DOMContentLoaded", async () => {
     initializeMap();
 });
 
+//Check for dataset-list before proceeding
+async function waitForElement(selector, timeout = 3000) {
+    return new Promise((resolve, reject) => {
+        const start = Date.now();
+        const check = setInterval(() => {
+            const element = document.querySelector(selector);
+            if (element) {
+                clearInterval(check);
+                resolve(element);
+            }
+            if (Date.now() - start >= timeout) {
+                clearInterval(check);
+                reject(new Error(`Timeout: Element ${selector} not found in DOM.`));
+            }
+        }, 100); // Check every 100ms
+    });
+}
+
 // Function to get available datasets dynamically
 async function populateDatasetList() {
-    await new Promise(resolve => setTimeout(resolve, 500)); // Delay in case the element loads late
-
-    const datasetList = document.getElementById("dataset-list");
-    if (!datasetList) {
-        console.error("Element #dataset-list not found in DOM after waiting.");
-        return;
-    }
-
     try {
         const response = await fetch("http://localhost:8000/Map_JSON/");
         if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
