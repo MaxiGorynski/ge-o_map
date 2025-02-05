@@ -34,7 +34,9 @@ async function waitForElement(selector, timeout = 3000) {
 
 // Function to get available datasets dynamically
 async function populateDatasetList() {
+    console.log("✅ populateDatasetList called");
     console.log("📥 Fetching dataset list from server...");
+
     try {
         const response = await fetch("http://localhost:8000/Map_JSON/");
         console.log("📥 Response received for dataset list:", response);
@@ -54,6 +56,7 @@ async function populateDatasetList() {
             console.error("❌ Element #dataset-list not found in DOM.");
             return;
         }
+
         datasetList.innerHTML = "";
 
         links.forEach(link => {
@@ -63,26 +66,46 @@ async function populateDatasetList() {
 
             const button = document.createElement("button");
             button.textContent = datasetName;
-            button.addEventListener("click", () => loadDataset(datasetUrl));
+            button.addEventListener("click", () => {
+                console.log(`🖱️ Clicked: ${datasetName}`);
+                loadDatasetForMap(datasetUrl, datasetName);
+            });
+
             datasetList.appendChild(button);
         });
 
         console.log("✅ Dataset list updated in DOM.");
+
     } catch (error) {
         console.error("❌ Error fetching dataset list:", error);
     }
 }
 
+
+console.log("✅ Dataset list updated in DOM.");
+
+
 // Function to dynamically load datasets
-async function loadDataset(jsonFile) {
-    console.log(`📂 Attempting to load dataset: ${jsonFile}`);
+async function loadDataset(datasetUrl, key) {
+    console.log(`🔍 loadDataset called with: URL=${datasetUrl}, Key=${key}`);
+
     try {
-        const response = await fetch(jsonFile);
+        const response = await fetch(datasetUrl);
+        console.log(`📥 Response for ${key || "UNKNOWN KEY"}: Status ${response.status}`);
+
         if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
         console.log("✅ Successfully fetched dataset");
 
         const data = await response.json();
-        console.log("📊 Parsed JSON Data:", data);
+
+        // Ensure valid JSON format
+        if (!Array.isArray(data) || data.length === 0) {
+            console.error("❌ Invalid dataset format: Expected a non-empty array.");
+            return;
+        }
+
+        console.log(`✅ Successfully loaded ${key} (${data.length} entries)`);
+        console.log("🔍 First entry:", data[0]); // Log the first entry for debugging
 
         const controlsContainer = document.getElementById("data-controls");
         if (!controlsContainer) {
@@ -91,13 +114,7 @@ async function loadDataset(jsonFile) {
         }
         console.log("🛠️ Found #data-controls element");
 
-        controlsContainer.innerHTML = "";
-
-        if (!Array.isArray(data) || data.length === 0) {
-            console.error("❌ Invalid dataset format: Expected an array of objects.");
-            return;
-        }
-        console.log("✅ Dataset is a valid array with", data.length, "entries");
+        controlsContainer.innerHTML = ""; // Clear previous controls
 
         const headers = Object.keys(data[0]).filter(
             key => key !== "OA_Code" && key !== "Latitude" && key !== "Longitude"
@@ -105,9 +122,10 @@ async function loadDataset(jsonFile) {
         console.log("📌 Extracted headers:", headers);
 
         const groupedHeaders = groupHeaders(headers);
-        console.log("📂 Grouped headers:", groupedHeaders);
+        console.log("📂 Grouped headers:", Object.keys(groupedHeaders));
 
-        Object.keys(groupedHeaders).forEach(category => {
+        // Generate UI for each category
+        Object.entries(groupedHeaders).forEach(([category, datasets]) => {
             console.log(`📁 Creating category: ${category}`);
 
             const details = document.createElement("details");
@@ -118,24 +136,22 @@ async function loadDataset(jsonFile) {
             const dropdown = document.createElement("div");
             dropdown.classList.add("dropdown-content");
 
-            groupedHeaders[category].forEach(dataset => {
+            datasets.forEach(dataset => {
+                const datasetId = `toggle-${dataset.replace(/\s+/g, "-").toLowerCase()}`;
+
                 console.log(`🔹 Adding dataset option: ${dataset}`);
 
                 const label = document.createElement("label");
                 const checkbox = document.createElement("input");
 
                 checkbox.type = "checkbox";
-                checkbox.id = `toggle-${dataset.replace(/\s+/g, "-").toLowerCase()}`;
+                checkbox.id = datasetId;
                 checkbox.setAttribute("data-dataset", dataset);
                 checkbox.checked = false;
 
                 checkbox.addEventListener("change", () => {
                     console.log(`🔀 Checkbox changed: ${dataset}, Checked: ${checkbox.checked}`);
-                    if (checkbox.checked) {
-                        fetchDataset(dataset);
-                    } else {
-                        removeDataset(dataset);
-                    }
+                    checkbox.checked ? fetchDataset(dataset) : removeDataset(dataset);
                 });
 
                 label.appendChild(checkbox);
@@ -150,10 +166,12 @@ async function loadDataset(jsonFile) {
             controlsContainer.appendChild(details);
             console.log(`✅ Category added: ${category}`);
         });
+
     } catch (error) {
         console.error("❌ Error loading dataset:", error);
     }
 }
+
 
 // Function to group dataset headers
 function groupHeaders(headers) {
@@ -195,6 +213,7 @@ function groupHeaders(headers) {
 
 async function initializeMap() {
     console.log("🗺️ Initializing Map...");
+    populateDatasetList();
 
     const map = L.map("map").setView([55.3781, -3.4360], 6);
 
@@ -205,7 +224,7 @@ async function initializeMap() {
 
     const layerGroups = {};
 
-    async function loadDataset(datasetUrl, key) {
+    async function loadDatasetForMap(datasetUrl, key) {
         console.log(`📥 Fetching dataset: ${datasetUrl} for key: ${key}`);
 
         try {
@@ -265,11 +284,14 @@ async function initializeMap() {
 
 
 
+
 // Functions to handle dataset toggling
 function fetchDataset(dataset) {
+    console.log("🔄 fetchDataset called with:", dataset);
     console.log(`Fetching dataset: ${dataset}`);
 }
 
 function removeDataset(dataset) {
+    console.log("🗑️ removeDataset called with:", dataset);
     console.log(`Removing dataset: ${dataset}`);
 }
