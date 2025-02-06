@@ -45,17 +45,20 @@ async function populateDatasetList() {
         links.forEach(link => {
             const datasetName = link.textContent; // Keep original filename for URL
             const datasetUrl = `http://localhost:8000/Map_JSON/${datasetName}`; // URL must match the file
-            console.log(`➕ Adding dataset: ${datasetName} (${datasetUrl})`);
+
+            const displayName = datasetName.replace(".json", "").replace(/_/g, " "); // Cleaned name
+            console.log(`➕ Adding dataset: ${displayName} (${datasetUrl})`);
 
             const button = document.createElement("button");
-            button.textContent = datasetName.replace(".json", "").replace(/_/g, " "); // Modify display name only
+            button.textContent = displayName;
             button.style.textAlign = "left"; // Align button text to the left
             button.style.display = "block"; // Ensure buttons stack vertically
             button.style.width = "100%"; // Make buttons full width
+            button.style.marginBottom = "5px"; // Add spacing between buttons
 
             button.addEventListener("click", () => {
                 console.log(`🖱️ Clicked: ${datasetName}`);
-                loadDataset(datasetUrl, datasetName);
+                loadDataset(datasetUrl, datasetName); // Ensure proper dataset loading
             });
 
             datasetList.appendChild(button);
@@ -66,6 +69,7 @@ async function populateDatasetList() {
         console.error("❌ Error fetching dataset list:", error);
     }
 }
+
 
 
 // 3️⃣ Load dataset & show headers in a dropdown
@@ -215,17 +219,8 @@ function groupHeaders(headers) {
 
         console.log(`🔍 Checking header: "${header}"`);
 
-        // Check if the header starts with specific keywords
-        if (lowerHeader.startsWith("all people")) {
-            category = "All People";
-        } else if (lowerHeader.startsWith("male") && !lowerHeader.includes("female")) {
-            category = "Male Only";
-        } else if (lowerHeader.startsWith("female")) {
-            category = "Female Only";
-        } else {
-            // If none of the predefined categories match, use the header as the category name
-            category = header;
-        }
+        // Extract category name before the first comma, or keep the full name if no comma exists
+        category = header.includes(",") ? header.split(",")[0].trim() : header.trim();
 
         console.log(`📂 Assigned category for "${header}": ${category}`);
 
@@ -240,6 +235,7 @@ function groupHeaders(headers) {
     console.log("✅ Final grouped headers:", groups);
     return groups;
 }
+
 
 
 // 7️⃣ Run everything in the correct order when the page loads
