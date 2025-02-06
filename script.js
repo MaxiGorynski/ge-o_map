@@ -17,10 +17,13 @@ async function initialiseMap() {
 
 // 2️⃣ Populate dataset list in the UI
 async function populateDatasetList() {
+    console.log("✅ populateDatasetList called");
     console.log("📥 Fetching dataset list from server...");
 
     try {
         const response = await fetch("http://localhost:8000/Map_JSON/");
+        console.log("📥 Response received for dataset list:", response);
+
         if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
 
         const parser = new DOMParser();
@@ -37,15 +40,19 @@ async function populateDatasetList() {
             return;
         }
 
-        datasetList.innerHTML = ""; // Clear previous list
+        datasetList.innerHTML = ""; // Clear previous entries
 
         links.forEach(link => {
-            const datasetName = link.textContent;
-            const datasetUrl = `http://localhost:8000/Map_JSON/${datasetName}`;
+            const datasetName = link.textContent; // Keep original filename for URL
+            const datasetUrl = `http://localhost:8000/Map_JSON/${datasetName}`; // URL must match the file
             console.log(`➕ Adding dataset: ${datasetName} (${datasetUrl})`);
 
             const button = document.createElement("button");
-            button.textContent = datasetName;
+            button.textContent = datasetName.replace(".json", "").replace(/_/g, " "); // Modify display name only
+            button.style.textAlign = "left"; // Align button text to the left
+            button.style.display = "block"; // Ensure buttons stack vertically
+            button.style.width = "100%"; // Make buttons full width
+
             button.addEventListener("click", () => {
                 console.log(`🖱️ Clicked: ${datasetName}`);
                 loadDataset(datasetUrl, datasetName);
@@ -59,6 +66,7 @@ async function populateDatasetList() {
         console.error("❌ Error fetching dataset list:", error);
     }
 }
+
 
 // 3️⃣ Load dataset & show headers in a dropdown
 async function loadDataset(datasetUrl, key) {
@@ -202,31 +210,37 @@ function groupHeaders(headers) {
     const groups = {};
 
     headers.forEach(header => {
-        let category = "other";
+        let category;
         const lowerHeader = header.toLowerCase();
 
         console.log(`🔍 Checking header: "${header}"`);
 
-        if (lowerHeader.includes("all people")) {
+        // Check if the header starts with specific keywords
+        if (lowerHeader.startsWith("all people")) {
             category = "All People";
-        } else if (lowerHeader.includes("male") && !lowerHeader.includes("female")) {
+        } else if (lowerHeader.startsWith("male") && !lowerHeader.includes("female")) {
             category = "Male Only";
-        } else if (lowerHeader.includes("female")) {
+        } else if (lowerHeader.startsWith("female")) {
             category = "Female Only";
+        } else {
+            // If none of the predefined categories match, use the header as the category name
+            category = header;
         }
-          else {
-            category = "Other";
-         }
 
         console.log(`📂 Assigned category for "${header}": ${category}`);
 
-        if (!groups[category]) groups[category] = [];
+        if (!groups[category]) {
+            groups[category] = [];
+            console.log(`🆕 Created new category: ${category}`);
+        }
+
         groups[category].push(header);
     });
 
     console.log("✅ Final grouped headers:", groups);
     return groups;
 }
+
 
 // 7️⃣ Run everything in the correct order when the page loads
 document.addEventListener("DOMContentLoaded", async () => {
