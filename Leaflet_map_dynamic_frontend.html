@@ -8,12 +8,40 @@
             height: 100vh; /* Full height of the viewport */
         }
 
-        /* Sidebar for dynamic dropdowns, fixed width */
+        /* Sidebar for dynamic dataset list and toggles */
         .sidebar {
-            width: 250px; /* You can adjust this width */
+            width: 250px; /* Adjustable width */
             overflow-y: auto;
             background-color: #f4f4f4;
             padding: 10px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px; /* Adds spacing between elements */
+        }
+
+        /* Ensure dataset buttons are left-aligned and spaced */
+        .sidebar button {
+            display: block;
+            text-align: left;
+            width: 100%;
+            padding: 8px;
+            font-size: 14px;
+            white-space: normal; /* Allow text wrapping */
+            word-break: break-word; /* Ensure text does not overflow */
+            border: 1px solid #ccc;
+            background: white;
+            cursor: pointer;
+        }
+
+        .sidebar button:hover {
+            background-color: #ddd;
+        }
+
+        /* Ensure dropdowns and checkboxes are spaced out */
+        .dropdown-content {
+            margin-top: 10px;
+            border-top: 1px solid #ccc;
+            padding-top: 10px;
         }
 
         /* Map container should take the remaining space */
@@ -24,8 +52,26 @@
 
         /* Map element should fill the available space */
         #map {
-            height: 100%; /* Full height */
-            width: 100%; /* Full width of the container */
+            height: 100%;
+            width: 100%;
+        }
+        /* Ensure dataset buttons inside #dataset-list are properly aligned and spaced */
+        #dataset-list button {
+            display: block;
+            text-align: left;
+            width: 100%;
+            padding: 8px;
+            font-size: 14px;
+            white-space: normal; /* Allow text wrapping */
+            word-break: break-word; /* Ensure text does not overflow */
+            border: 1px solid #ccc;
+            background: white;
+            cursor: pointer;
+            margin-bottom: 5px; /* Adds spacing between buttons */
+        }
+
+        #dataset-list button:hover {
+            background-color: #ddd;
         }
     </style>
     <meta charset="UTF-8">
@@ -37,10 +83,10 @@
 </head>
 <body>
     <div class="container">
-        <!-- Sidebar for the dynamic dropdowns -->
+        <!-- Sidebar for dataset selection -->
         <div class="sidebar">
             <div id="dataset-list"></div> <!-- Dataset buttons will be populated here -->
-            <div id="data-controls"></div> <!-- Dynamic dropdowns go here -->
+            <div id="data-controls"></div> <!-- Dynamic dataset toggles go here -->
         </div>
         <!-- Map container -->
         <div class="map-container">

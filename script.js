@@ -1,9 +1,9 @@
 let map;
 const layerGroups = {}; // Store dataset layers
 
-// 1️⃣ Initialize the map (Runs once)
-async function initializeMap() {
-    console.log("🗺️ Initializing Map...");
+//1️⃣ Initialise the map (Runs once)
+async function initialiseMap() {
+    console.log("🗺️ Initialising Map...");
 
     map = L.map("map").setView([55.3781, -3.4360], 6);
 
@@ -12,7 +12,7 @@ async function initializeMap() {
         attribution: "© OpenStreetMap contributors",
     }).addTo(map);
 
-    console.log("✅ Map initialized.");
+    console.log("✅ Map initialised.");
 }
 
 // 2️⃣ Populate dataset list in the UI
@@ -230,7 +230,7 @@ function groupHeaders(headers) {
 
 // 7️⃣ Run everything in the correct order when the page loads
 document.addEventListener("DOMContentLoaded", async () => {
-    console.log("📌 DOM fully loaded. Initializing...");
-    initializeMap();  // 🌍 Step 1: Start the map
+    console.log("📌 DOM fully loaded. Initialising...");
+    initialiseMap();  // 🌍 Step 1: Start the map
     await populateDatasetList();  // 📋 Step 2: Populate dataset list
 });
