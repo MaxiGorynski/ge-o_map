@@ -1,38 +1,26 @@
-document.addEventListener("DOMContentLoaded", async () => {
-    console.log("📌 DOM fully loaded. Initializing...");
-    try {
-        await populateDatasetList();
-        console.log("✅ Dataset list populated.");
-    } catch (err) {
-        console.error("❌ Error populating dataset list:", err);
-    }
 
-    initializeMap();
-    console.log("✅ Map initialized.");
-});
 
-// Check for dataset-list before proceeding
-async function waitForElement(selector, timeout = 3000) {
-    console.log(`⏳ Waiting for element: ${selector}`);
-    return new Promise((resolve, reject) => {
-        const start = Date.now();
-        const check = setInterval(() => {
-            const element = document.querySelector(selector);
-            if (element) {
-                clearInterval(check);
-                console.log(`✅ Element found: ${selector}`);
-                resolve(element);
-            }
-            if (Date.now() - start >= timeout) {
-                clearInterval(check);
-                console.error(`❌ Timeout: Element ${selector} not found in DOM.`);
-                reject(new Error(`Timeout: Element ${selector} not found in DOM.`));
-            }
-        }, 100); // Check every 100ms
-    });
+
+
+
+let map;
+const layerGroups = {}; // Store dataset layers
+
+//1️⃣ Initialise the map (Runs once)
+async function initialiseMap() {
+    console.log("🗺️ Initialising Map...");
+
+    map = L.map("map").setView([55.3781, -3.4360], 6);
+
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        maxZoom: 19,
+        attribution: "© OpenStreetMap contributors",
+    }).addTo(map);
+
+    console.log("✅ Map initialised.");
 }
 
-// Function to get available datasets dynamically
+// 2️⃣ Populate dataset list in the UI
 async function populateDatasetList() {
     console.log("✅ populateDatasetList called");
     console.log("📥 Fetching dataset list from server...");
@@ -45,7 +33,7 @@ async function populateDatasetList() {
 
         const parser = new DOMParser();
         const htmlText = await response.text();
-        console.log("📄 Raw HTML fetched:", htmlText.substring(0, 500)); // Show first 500 chars to debug
+        console.log("📄 Raw HTML fetched:", htmlText.substring(0, 500));
 
         const htmlDoc = parser.parseFromString(htmlText, "text/html");
         const links = [...htmlDoc.querySelectorAll("a[href$='.json']")];
@@ -57,48 +45,107 @@ async function populateDatasetList() {
             return;
         }
 
-        datasetList.innerHTML = "";
+        datasetList.innerHTML = ""; // Clear previous entries
 
         links.forEach(link => {
             const datasetName = link.textContent;
             const datasetUrl = `http://localhost:8000/Map_JSON/${datasetName}`;
             console.log(`➕ Adding dataset: ${datasetName} (${datasetUrl})`);
 
+            // Wrapper to ensure button and dropdown stack properly
+            const buttonContainer = document.createElement("div");
+            buttonContainer.classList.add("dataset-item");
+
+            // Dataset button
             const button = document.createElement("button");
-            button.textContent = datasetName;
-            button.addEventListener("click", () => {
+            button.textContent = datasetName.replace(".json", "").replace(/_/g, " ");
+            button.style.textAlign = "left";
+            button.style.width = "100%";
+
+            // Dropdown for dataset fields (hidden initially)
+            const dropdown = document.createElement("div");
+            dropdown.classList.add("dropdown-content");
+            dropdown.style.display = "none";
+
+            // Event listener to handle dataset loading
+            button.addEventListener("click", async () => {
                 console.log(`🖱️ Clicked: ${datasetName}`);
-                loadDatasetForMap(datasetUrl, datasetName);
+
+                // Close any open dropdowns before opening a new one
+                document.querySelectorAll(".dropdown-content").forEach(el => {
+                    if (el !== dropdown) el.style.display = "none";
+                });
+
+                if (dropdown.style.display === "none") {
+                    dropdown.style.display = "block"; // Show dropdown
+
+                    // Load dataset and populate dropdown
+                    dropdown.innerHTML = "<p>Loading...</p>"; // Temporary loading message
+                    const groupedHeaders = await loadDataset(datasetUrl, datasetName);
+                    if (!groupedHeaders) return;
+
+                    dropdown.innerHTML = ""; // Clear previous content
+
+                    Object.keys(groupedHeaders).forEach(category => {
+                        const details = document.createElement("details");
+                        const summary = document.createElement("summary");
+                        summary.textContent = category;
+                        details.appendChild(summary);
+
+                        groupedHeaders[category].forEach(dataset => {
+                            const label = document.createElement("label");
+                            const checkbox = document.createElement("input");
+                            checkbox.type = "checkbox";
+                            checkbox.setAttribute("data-dataset", dataset);
+
+                            checkbox.addEventListener("change", () => {
+                                console.log(`🔀 Checkbox changed: ${dataset}, Checked: ${checkbox.checked}`);
+                                checkbox.checked ? fetchDataset(dataset) : removeDataset(dataset);
+                            });
+
+                            label.appendChild(checkbox);
+                            label.appendChild(document.createTextNode(dataset));
+
+                            const wrapper = document.createElement("div");
+                            wrapper.appendChild(label);
+                            details.appendChild(wrapper);
+                        });
+
+                        dropdown.appendChild(details);
+                    });
+
+                    console.log(`📂 Inserted dropdown under: ${datasetName}`);
+                } else {
+                    dropdown.style.display = "none"; // Hide dropdown if already open
+                }
             });
 
-            datasetList.appendChild(button);
+            buttonContainer.appendChild(button);
+            buttonContainer.appendChild(dropdown);
+            datasetList.appendChild(buttonContainer);
         });
 
         console.log("✅ Dataset list updated in DOM.");
-
     } catch (error) {
         console.error("❌ Error fetching dataset list:", error);
     }
 }
 
 
-console.log("✅ Dataset list updated in DOM.");
 
 
-// Function to dynamically load datasets
+// 3️⃣ Load dataset & show headers in a dropdown
 async function loadDataset(datasetUrl, key) {
-    console.log(`🔍 loadDataset called with: URL=${datasetUrl}, Key=${key}`);
+    console.log(`📂 Attempting to load dataset: ${datasetUrl}`);
 
     try {
         const response = await fetch(datasetUrl);
-        console.log(`📥 Response for ${key || "UNKNOWN KEY"}: Status ${response.status}`);
+        console.log(`📥 Response for ${key}: Status ${response.status}`);
 
         if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
         console.log("✅ Successfully fetched dataset");
 
         const data = await response.json();
-
-        // Ensure valid JSON format
         if (!Array.isArray(data) || data.length === 0) {
             console.error("❌ Invalid dataset format: Expected a non-empty array.");
             return;
@@ -112,54 +159,53 @@ async function loadDataset(datasetUrl, key) {
             console.error("❌ Element #data-controls not found in DOM.");
             return;
         }
-        console.log("🛠️ Found #data-controls element");
 
-        controlsContainer.innerHTML = ""; // Clear previous controls
+        controlsContainer.innerHTML = ""; // Clear previous dataset controls
 
+        // 🔥 Extract dataset headers (excluding non-relevant keys)
         const headers = Object.keys(data[0]).filter(
             key => key !== "OA_Code" && key !== "Latitude" && key !== "Longitude"
         );
-        console.log("📌 Extracted headers:", headers);
 
+        // 🔥 Group dataset fields for better organization
         const groupedHeaders = groupHeaders(headers);
         console.log("📂 Grouped headers:", Object.keys(groupedHeaders));
 
-        // Generate UI for each category
+        // 🔥 Dynamically create checkboxes under categorized dropdowns
         Object.entries(groupedHeaders).forEach(([category, datasets]) => {
             console.log(`📁 Creating category: ${category}`);
 
+            // Create a collapsible section for each category
             const details = document.createElement("details");
             const summary = document.createElement("summary");
             summary.textContent = category;
             details.appendChild(summary);
 
+            // Dropdown container
             const dropdown = document.createElement("div");
             dropdown.classList.add("dropdown-content");
 
             datasets.forEach(dataset => {
-                const datasetId = `toggle-${dataset.replace(/\s+/g, "-").toLowerCase()}`;
-
                 console.log(`🔹 Adding dataset option: ${dataset}`);
 
                 const label = document.createElement("label");
                 const checkbox = document.createElement("input");
 
                 checkbox.type = "checkbox";
-                checkbox.id = datasetId;
                 checkbox.setAttribute("data-dataset", dataset);
                 checkbox.checked = false;
 
                 checkbox.addEventListener("change", () => {
                     console.log(`🔀 Checkbox changed: ${dataset}, Checked: ${checkbox.checked}`);
-                    checkbox.checked ? fetchDataset(dataset) : removeDataset(dataset);
+                    checkbox.checked ? addLayerToMap(dataset, data) : removeLayerFromMap(dataset);
                 });
 
                 label.appendChild(checkbox);
-                label.appendChild(document.createTextNode(dataset));
+                label.appendChild(document.createTextNode(` ${dataset}`));
 
-                const wrapper = document.createElement("div");
-                wrapper.appendChild(label);
-                dropdown.appendChild(wrapper);
+                // ✅ Append checkbox with a line break for clarity
+                dropdown.appendChild(label);
+                dropdown.appendChild(document.createElement("br"));
             });
 
             details.appendChild(dropdown);
@@ -167,34 +213,83 @@ async function loadDataset(datasetUrl, key) {
             console.log(`✅ Category added: ${category}`);
         });
 
+        return groupedHeaders; // Return grouped data for further processing if needed
+
     } catch (error) {
         console.error("❌ Error loading dataset:", error);
+        return null;
     }
 }
 
 
-// Function to group dataset headers
+
+// 4️⃣ Add selected dataset layer to the map
+function addLayerToMap(dataset, data) {
+    console.log(`📌 Adding layer for ${dataset}`);
+
+    if (!layerGroups[dataset]) {
+        console.log(`🆕 Creating new layer group for: ${dataset}`);
+        layerGroups[dataset] = L.layerGroup();
+    }
+
+    data.forEach(entry => {
+        try {
+            const lat = parseFloat(entry.Latitude);
+            const lon = parseFloat(entry.Longitude);
+
+            if (isNaN(lat) || isNaN(lon)) {
+                console.warn("❌ Skipping invalid lat/lon:", entry);
+                return;
+            }
+
+            const datasetValue = entry[dataset] ?? "N/A"; // Fetch dataset value or default to 'N/A'
+
+            const marker = L.circleMarker([lat, lon], {
+                radius: 5,
+                color: "blue",
+            });
+
+            marker.entry = entry;
+            marker.bindPopup(`
+                <b>OA Code:</b> ${entry.OA_Code} <br>
+                <b>${dataset}:</b> ${datasetValue}
+            `);
+
+            layerGroups[dataset].addLayer(marker);
+        } catch (markerError) {
+            console.error(`❌ Error processing entry in ${dataset}:`, markerError);
+        }
+    });
+
+    console.log(`🗂️ Layer Group Updated: ${dataset}`, layerGroups[dataset]);
+    map.addLayer(layerGroups[dataset]);
+}
+
+
+// 5️⃣ Remove dataset layer from the map
+function removeLayerFromMap(dataset) {
+    console.log(`🗑️ Removing layer for ${dataset}`);
+
+    if (layerGroups[dataset]) {
+        map.removeLayer(layerGroups[dataset]);
+        delete layerGroups[dataset];
+    }
+}
+
+// 6️⃣ Group headers (for dropdown categories)
 function groupHeaders(headers) {
     console.log("📌 Grouping headers:", headers);
 
     const groups = {};
 
     headers.forEach(header => {
-        let category = "Other";
-        const lowerHeader = header.toLowerCase(); // Store lowercase version once
+        let category;
+        const lowerHeader = header.toLowerCase();
 
         console.log(`🔍 Checking header: "${header}"`);
 
-        if (lowerHeader.includes("all people")) {
-            category = "All People";
-        } else if (lowerHeader.includes("male") && !lowerHeader.includes("female")) {
-            category = "Male Only";
-        } else if (lowerHeader.includes("female") && !lowerHeader.includes("male")) {
-            category = "Female Only";
-        } else if (lowerHeader.includes("female")) {
-            // Catch any remaining female-related headers
-            category = "Female Only";
-        }
+        // Extract category name before the first comma, or keep the full name if no comma exists
+        category = header.includes(",") ? header.split(",")[0].trim() : header.trim();
 
         console.log(`📂 Assigned category for "${header}": ${category}`);
 
@@ -211,87 +306,10 @@ function groupHeaders(headers) {
 }
 
 
-async function initializeMap() {
-    console.log("🗺️ Initializing Map...");
-    populateDatasetList();
 
-    const map = L.map("map").setView([55.3781, -3.4360], 6);
-
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-        maxZoom: 19,
-        attribution: "© OpenStreetMap contributors",
-    }).addTo(map);
-
-    const layerGroups = {};
-
-    async function loadDatasetForMap(datasetUrl, key) {
-        console.log(`📥 Fetching dataset: ${datasetUrl} for key: ${key}`);
-
-        try {
-            const response = await fetch(datasetUrl);
-            console.log(`📥 Response for ${key}: Status ${response.status}`);
-
-            if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
-
-            const data = await response.json();
-            console.log(`✅ Successfully loaded ${key} (${data.length} entries)`);
-
-            if (!data || data.length === 0) {
-                console.warn(`⚠️ Empty dataset received for ${key}`);
-                return;
-            }
-
-            if (!layerGroups[key]) {
-                console.log(`🆕 Creating new layer group for: ${key}`);
-                layerGroups[key] = L.layerGroup();
-            }
-
-            data.forEach((entry) => {
-                try {
-                    console.log("🔹 Processing entry:", entry);
-                    const lat = parseFloat(entry.Latitude);
-                    const lon = parseFloat(entry.Longitude);
-
-                    if (isNaN(lat) || isNaN(lon)) {
-                        console.warn("❌ Skipping invalid lat/lon:", entry);
-                        return;
-                    }
-
-                    const marker = L.circleMarker([lat, lon], {
-                        radius: 5,
-                        color: "blue",
-                    });
-
-                    marker.entry = entry;
-                    marker.bindPopup(`OA Code: ${entry.OA_Code}`);
-
-                    layerGroups[key].addLayer(marker);
-                    console.log(`✅ Added marker for ${key}:`, marker);
-                } catch (markerError) {
-                    console.error(`❌ Error processing entry in ${key}:`, markerError);
-                }
-            });
-
-            console.log(`🗂️ Layer Group Updated: ${key}`, layerGroups[key]);
-        } catch (error) {
-            console.error(`❌ Error loading dataset for ${key}:`, error);
-        }
-    }
-
-    // Ensure datasets are dynamically loaded
-    populateDatasetList();
-}
-
-
-
-
-// Functions to handle dataset toggling
-function fetchDataset(dataset) {
-    console.log("🔄 fetchDataset called with:", dataset);
-    console.log(`Fetching dataset: ${dataset}`);
-}
-
-function removeDataset(dataset) {
-    console.log("🗑️ removeDataset called with:", dataset);
-    console.log(`Removing dataset: ${dataset}`);
-}
+// 7️⃣ Run everything in the correct order when the page loads
+document.addEventListener("DOMContentLoaded", async () => {
+    console.log("📌 DOM fully loaded. Initialising...");
+    initialiseMap();  // 🌍 Step 1: Start the map
+    await populateDatasetList();  // 📋 Step 2: Populate dataset list
+});

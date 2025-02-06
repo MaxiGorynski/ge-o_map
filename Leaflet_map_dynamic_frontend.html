@@ -10,13 +10,13 @@
 
         /* Sidebar for dynamic dataset list and toggles */
         .sidebar {
-            width: 250px; /* Adjustable width */
+            width: 250px;
             overflow-y: auto;
             background-color: #f4f4f4;
             padding: 10px;
             display: flex;
-            flex-direction: column;
-            gap: 10px; /* Adds spacing between elements */
+            flex-direction: column; /* Stack items vertically */
+            gap: 5px; /* Space between items */
         }
 
         /* Ensure dataset buttons are left-aligned and spaced */
@@ -68,6 +68,15 @@
             background: white;
             cursor: pointer;
             margin-bottom: 5px; /* Adds spacing between buttons */
+        }
+            display: flex;
+                        flex-direction: column; /* Stack button and dropdown */
+                        gap: 5px; /* Space between button and dropdown */
+                    }
+        .dataset-item {
+            display: flex;
+            flex-direction: column; /* Stack button and dropdown */
+            gap: 5px; /* Space between button and dropdown */
         }
 
         #dataset-list button:hover {

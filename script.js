@@ -31,7 +31,7 @@ async function populateDatasetList() {
         console.log("📄 Raw HTML fetched:", htmlText.substring(0, 500));
 
         const htmlDoc = parser.parseFromString(htmlText, "text/html");
-        const links = [...htmlDoc.querySelectorAll("a[href$='.json']")];
+        let links = [...htmlDoc.querySelectorAll("a[href$='.json']")];
         console.log(`🔗 Found ${links.length} dataset links.`);
 
         const datasetList = document.getElementById("dataset-list");
@@ -41,6 +41,13 @@ async function populateDatasetList() {
         }
 
         datasetList.innerHTML = ""; // Clear previous entries
+
+        // Sort numerically instead of lexicographically
+        links.sort((a, b) => {
+            const numA = parseInt(a.textContent.match(/\d+/) || "0", 10);
+            const numB = parseInt(b.textContent.match(/\d+/) || "0", 10);
+            return numA - numB;
+        });
 
         links.forEach(link => {
             const datasetName = link.textContent; // Keep original filename for URL
@@ -69,6 +76,7 @@ async function populateDatasetList() {
         console.error("❌ Error fetching dataset list:", error);
     }
 }
+
 
 
 
