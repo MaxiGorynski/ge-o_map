@@ -6,17 +6,21 @@
         .container {
             display: flex;
             height: 100vh; /* Full height of the viewport */
+            overflow: hidden; /* Prevent scrolling on the full page */
         }
 
         /* Sidebar for dynamic dataset list and toggles */
         .sidebar {
-            width: 250px;
-            overflow-y: auto;
+            width: 260px; /* Slightly increased width to accommodate button */
             background-color: #f4f4f4;
             padding: 10px;
             display: flex;
             flex-direction: column; /* Stack items vertically */
             gap: 5px; /* Space between items */
+            position: relative;
+            height: 100vh; /* Full height */
+            overflow-y: auto; /* Allow scrolling inside sidebar */
+            flex-shrink: 0; /* Prevent sidebar from shrinking */
         }
 
         /* Ensure dataset buttons are left-aligned and spaced */
@@ -44,10 +48,36 @@
             padding-top: 10px;
         }
 
+        #clear-layers-btn {
+            position: fixed; /* Fix it to the screen */
+            left: 285px; /* Position it outside the sidebar */
+            top: 50%; /* Center it vertically */
+            transform: translateY(-50%);
+            width: 40px;
+            height: auto;
+            background-color: #ff4444; /* Red for clear action */
+            color: white;
+            border: none;
+            padding: 8px 12px;
+            cursor: pointer;
+            font-size: 12px;
+            writing-mode: vertical-rl; /* Rotate text vertically */
+            text-align: center;
+            font-weight: bold;
+            border-radius: 5px;
+            transition: background 0.3s ease-in-out;
+            z-index: 2000; /* Ensure it's always on top */
+        }
+
+        #clear-layers-btn:hover {
+            background-color: #cc0000;
+        }
+
         /* Map container should take the remaining space */
         .map-container {
             flex-grow: 1; /* Makes the map container fill the remaining space */
-            height: 100%; /* Ensure it takes the full height */
+            height: 100vh; /* Ensure it takes the full height */
+            overflow: hidden; /* Prevent any scrolling */
         }
 
         /* Map element should fill the available space */
@@ -55,6 +85,7 @@
             height: 100%;
             width: 100%;
         }
+
         /* Ensure dataset buttons inside #dataset-list are properly aligned and spaced */
         #dataset-list button {
             display: block;
@@ -94,6 +125,7 @@
     <div class="container">
         <!-- Sidebar for dataset selection -->
         <div class="sidebar">
+            <button id="clear-layers-btn">Clear All Layers</button>
             <div id="dataset-list"></div> <!-- Dataset buttons will be populated here -->
             <div id="data-controls"></div> <!-- Dynamic dataset toggles go here -->
         </div>

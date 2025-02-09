@@ -309,9 +309,7 @@ function removeLayerFromMap(dataset) {
     const remainingDatasets = Object.keys(layerGroups);
 
     if (remainingDatasets.length === 0) {
-        // No active datasets left, remove ALL high-value flags
-        document.querySelectorAll(".high-value-flag").forEach(flag => flag.remove());
-        console.log("🚨 All High flags removed (No active datasets left)");
+        clearAllLayers(); // Call new function to clear everything
     } else {
         // Remove only the flags associated with the dataset being toggled off
         document.querySelectorAll(`.high-value-flag[data-dataset="${dataset}"]`).forEach(flag => flag.remove());
@@ -319,7 +317,27 @@ function removeLayerFromMap(dataset) {
     }
 }
 
+// 6️⃣ New Function: Clear all layers at once
+function clearAllLayers() {
+    console.log("🗑️ Clearing ALL layers!");
 
+    // Remove all layers from map
+    Object.keys(layerGroups).forEach(dataset => {
+        map.removeLayer(layerGroups[dataset]);
+        delete layerGroups[dataset];
+    });
+
+    // Remove all markers
+    Object.keys(markerMap).forEach(key => {
+        map.removeLayer(markerMap[key]);
+        delete markerMap[key];
+    });
+
+    // Remove all high-value flags
+    document.querySelectorAll(".high-value-flag").forEach(flag => flag.remove());
+
+    console.log("🚨 All layers, markers, and flags have been cleared.");
+}
 
 // 6️⃣ Group headers (for dropdown categories)
 function groupHeaders(headers) {
@@ -350,11 +368,19 @@ function groupHeaders(headers) {
     return groups;
 }
 
-
-
 // 7️⃣ Run everything in the correct order when the page loads
 document.addEventListener("DOMContentLoaded", async () => {
-    console.log("📌 DOM fully loaded. Initialising...");
+    console.log("📌 DOM fully loaded. Initializing...");
+
+    // Ensure the Clear Layers button exists before adding the event listener
+    const clearLayersBtn = document.getElementById("clear-layers-btn");
+    if (clearLayersBtn) {
+        clearLayersBtn.addEventListener("click", clearAllLayers);
+        console.log("🧹 Clear All Layers button event listener added.");
+    } else {
+        console.error("❌ Clear All Layers button not found in DOM.");
+    }
+
     initialiseMap();  // 🌍 Step 1: Start the map
     await populateDatasetList();  // 📋 Step 2: Populate dataset list
 });
