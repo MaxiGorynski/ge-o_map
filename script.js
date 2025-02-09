@@ -58,6 +58,7 @@ async function populateDatasetList() {
 
             const button = document.createElement("button");
             button.textContent = displayName;
+            button.dataset.dataset = datasetName; // Store dataset key in button attribute
             button.style.textAlign = "left"; // Align button text to the left
             button.style.display = "block"; // Ensure buttons stack vertically
             button.style.width = "100%"; // Make buttons full width
@@ -98,15 +99,20 @@ async function loadDataset(datasetUrl, key) {
         }
 
         console.log(`✅ Successfully loaded ${key} (${data.length} entries)`);
-        console.log("🔍 First entry:", data[0]); // Log the first entry for debugging
+        console.log("🔍 First entry:", data[0]);
 
-        const controlsContainer = document.getElementById("data-controls");
-        if (!controlsContainer) {
-            console.error("❌ Element #data-controls not found in DOM.");
+        const datasetButton = document.querySelector(`button[data-dataset="${key}"]`);
+        if (!datasetButton) {
+            console.error(`❌ Button for dataset ${key} not found.`);
             return;
         }
 
-        controlsContainer.innerHTML = ""; // Clear previous controls
+        // 🔥 Remove any existing dropdowns for this dataset
+        const existingDropdown = datasetButton.nextElementSibling;
+        if (existingDropdown && existingDropdown.classList.contains("dropdown-container")) {
+            existingDropdown.remove();
+            return; // If dropdown exists, remove it and return
+        }
 
         // 🔥 Extract and group dataset headers
         const headers = Object.keys(data[0]).filter(
@@ -116,7 +122,10 @@ async function loadDataset(datasetUrl, key) {
         const groupedHeaders = groupHeaders(headers);
         console.log("📂 Grouped headers:", Object.keys(groupedHeaders));
 
-        // 🔥 Create checkboxes for datasets with line breaks
+        // 🔥 Create a dropdown container
+        const dropdownContainer = document.createElement("div");
+        dropdownContainer.classList.add("dropdown-container");
+
         Object.entries(groupedHeaders).forEach(([category, datasets]) => {
             console.log(`📁 Creating category: ${category}`);
 
@@ -146,20 +155,24 @@ async function loadDataset(datasetUrl, key) {
                 label.appendChild(checkbox);
                 label.appendChild(document.createTextNode(` ${dataset}`));
 
-                // ✅ Append to dropdown with a line break
                 dropdown.appendChild(label);
                 dropdown.appendChild(document.createElement("br"));
             });
 
             details.appendChild(dropdown);
-            controlsContainer.appendChild(details);
-            console.log(`✅ Category added: ${category}`);
+            dropdownContainer.appendChild(details);
         });
+
+        // ✅ Insert dropdown **right below** the clicked dataset button
+        datasetButton.insertAdjacentElement("afterend", dropdownContainer);
+
+        console.log(`✅ Dropdown inserted for ${key}`);
 
     } catch (error) {
         console.error("❌ Error loading dataset:", error);
     }
 }
+
 
 
 const markerMap = {}; // 🏷️ Global object to store markers by OA_Code
