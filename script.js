@@ -173,12 +173,19 @@ function addLayerToMap(dataset, data) {
     // Extract numerical values for dataset scaling
     const values = data
         .map(entry => parseFloat(entry[dataset]))
-        .filter(value => !isNaN(value)); // Remove NaN values
+        .filter(value => !isNaN(value))
+        .sort((a, b) => a - b); // Sort for percentile calculations
 
-    const minValue = Math.min(...values);
-    const maxValue = Math.max(...values);
+    if (values.length === 0) {
+        console.warn("⚠️ No valid numerical values found for dataset:", dataset);
+        return;
+    }
 
-    console.log(`📊 Min Value: ${minValue}, Max Value: ${maxValue}`);
+    const minValue = values[0];
+    const maxValue = values[values.length - 1];
+    const top2Threshold = values[Math.floor(values.length * 0.98)]; // 98th percentile value
+
+    console.log(`📊 Min: ${minValue}, Max: ${maxValue}, 98th Percentile Threshold: ${top2Threshold}`);
 
     data.forEach(entry => {
         try {
@@ -209,6 +216,12 @@ function addLayerToMap(dataset, data) {
             `);
 
             layerGroups[dataset].addLayer(marker);
+
+            // 🔥 If this entry is in the top 5%, add a flag right next to it
+            if (datasetValue >= top2Threshold) {
+                placeHighValueFlag(lat, lon);
+            }
+
         } catch (markerError) {
             console.error(`❌ Error processing entry in ${dataset}:`, markerError);
         }
@@ -216,6 +229,23 @@ function addLayerToMap(dataset, data) {
 
     console.log(`🗂️ Layer Group Updated: ${dataset}`, layerGroups[dataset]);
     map.addLayer(layerGroups[dataset]);
+}
+
+// 🚩 Function to place a "High" flag next to high-value markers
+function placeHighValueFlag(lat, lon) {
+    console.log(`🚩 Placing "High" flag at: (${lat}, ${lon})`);
+
+    // Slightly offset the flag so it doesn't overlap with the marker
+    const offsetLat = lat + 0.0005; // Small northward shift
+    const offsetLon = lon + 0.0005; // Small eastward shift
+
+    L.marker([offsetLat, offsetLon], {
+        icon: L.divIcon({
+            className: 'high-value-flag',
+            html: '<span style="color: red; font-weight: bold;">🚩 High</span>',
+            iconSize: [30, 30]
+        })
+    }).addTo(map);
 }
 
 // 🎨 Function to generate a blue color gradient from light blue (low values) to dark blue (high values)
@@ -231,7 +261,9 @@ function getBlueColor(value) {
 }
 
 
-// 5️⃣ Remove dataset layer from the map
+
+
+// 5️⃣ Remove dataset layer from the map, including "High" flags
 function removeLayerFromMap(dataset) {
     console.log(`🗑️ Removing layer for ${dataset}`);
 
@@ -239,6 +271,11 @@ function removeLayerFromMap(dataset) {
         map.removeLayer(layerGroups[dataset]);
         delete layerGroups[dataset];
     }
+
+    // Remove all "High" flags associated with the dataset
+    document.querySelectorAll(".high-value-flag").forEach(flag => flag.remove());
+
+    console.log(`🚨 All "High" flags removed for ${dataset}`);
 }
 
 // 6️⃣ Group headers (for dropdown categories)
