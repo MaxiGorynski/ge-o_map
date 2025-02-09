@@ -162,6 +162,8 @@ async function loadDataset(datasetUrl, key) {
 }
 
 
+const markerMap = {}; // 🏷️ Global object to store markers by OA_Code
+
 function addLayerToMap(dataset, data) {
     console.log(`📌 Adding layer for ${dataset}`);
 
@@ -174,7 +176,7 @@ function addLayerToMap(dataset, data) {
     const values = data
         .map(entry => parseFloat(entry[dataset]))
         .filter(value => !isNaN(value))
-        .sort((a, b) => a - b); // Sort for percentile calculations
+        .sort((a, b) => a - b);
 
     if (values.length === 0) {
         console.warn("⚠️ No valid numerical values found for dataset:", dataset);
@@ -183,42 +185,51 @@ function addLayerToMap(dataset, data) {
 
     const minValue = values[0];
     const maxValue = values[values.length - 1];
-    const top2Threshold = values[Math.floor(values.length * 0.98)]; // 98th percentile value
+    const top5Threshold = values[Math.floor(values.length * 0.95)]; // 95th percentile value
 
-    console.log(`📊 Min: ${minValue}, Max: ${maxValue}, 98th Percentile Threshold: ${top2Threshold}`);
+    console.log(`📊 Min: ${minValue}, Max: ${maxValue}, 95th Percentile Threshold: ${top5Threshold}`);
 
     data.forEach(entry => {
         try {
             const lat = parseFloat(entry.Latitude);
             const lon = parseFloat(entry.Longitude);
+            const datasetValue = parseFloat(entry[dataset]) || 0;
 
             if (isNaN(lat) || isNaN(lon)) {
                 console.warn("❌ Skipping invalid lat/lon:", entry);
                 return;
             }
 
-            const datasetValue = parseFloat(entry[dataset]) || 0; // Convert to number, default to 0
-            const normalizedValue = (datasetValue - minValue) / (maxValue - minValue || 1); // Normalize to 0-1
+            // Check if a marker already exists for this OA_Code
+            if (!markerMap[entry.OA_Code]) {
+                const marker = L.circleMarker([lat, lon], {
+                    radius: 5,
+                    color: getBlueColor((datasetValue - minValue) / (maxValue - minValue || 1)),
+                    fillColor: getBlueColor((datasetValue - minValue) / (maxValue - minValue || 1)),
+                    fillOpacity: 0.8
+                });
 
-            const color = getBlueColor(normalizedValue); // Get color from gradient
+                marker.entry = entry;
+                marker.datasetValues = {}; // Store dataset values for multiple toggles
+                markerMap[entry.OA_Code] = marker;
+                layerGroups[dataset].addLayer(marker);
+            }
 
-            const marker = L.circleMarker([lat, lon], {
-                radius: 5,
-                color: color,
-                fillColor: color,
-                fillOpacity: 0.8
-            });
+            // Update marker with new dataset value
+            const marker = markerMap[entry.OA_Code];
+            marker.datasetValues[dataset] = datasetValue;
 
-            marker.entry = entry;
-            marker.bindPopup(`
+            // Update popup to include all active datasets
+            const popupContent = `
                 <b>OA Code:</b> ${entry.OA_Code} <br>
-                <b>${dataset}:</b> ${datasetValue}
-            `);
+                ${Object.entries(marker.datasetValues)
+                    .map(([key, value]) => `<b>${key}:</b> ${value}`)
+                    .join("<br>")}
+            `;
+            marker.bindPopup(popupContent);
 
-            layerGroups[dataset].addLayer(marker);
-
-            // 🔥 If this entry is in the top 5%, add a flag right next to it
-            if (datasetValue >= top2Threshold) {
+            // 🔥 If this entry is in the top 5%, add a flag right on top of it
+            if (datasetValue >= top5Threshold) {
                 placeHighValueFlag(lat, lon);
             }
 
@@ -236,8 +247,8 @@ function placeHighValueFlag(lat, lon) {
     console.log(`🚩 Placing "High" flag at: (${lat}, ${lon})`);
 
     // Slightly offset the flag so it doesn't overlap with the marker
-    const offsetLat = lat + 0.0005; // Small northward shift
-    const offsetLon = lon + 0.0005; // Small eastward shift
+    const offsetLat = lat + 0.0008; // Small northward shift
+    const offsetLon = lon + 0.0008; // Small eastward shift
 
     L.marker([offsetLat, offsetLon], {
         icon: L.divIcon({
@@ -272,11 +283,43 @@ function removeLayerFromMap(dataset) {
         delete layerGroups[dataset];
     }
 
-    // Remove all "High" flags associated with the dataset
-    document.querySelectorAll(".high-value-flag").forEach(flag => flag.remove());
+    // Remove dataset values from marker popups but keep other datasets
+    Object.values(markerMap).forEach(marker => {
+        if (marker.datasetValues && dataset in marker.datasetValues) {
+            delete marker.datasetValues[dataset];
 
-    console.log(`🚨 All "High" flags removed for ${dataset}`);
+            // If no datasets remain in the marker, remove it from the map
+            if (Object.keys(marker.datasetValues).length === 0) {
+                map.removeLayer(marker);
+                delete markerMap[marker.entry.OA_Code];
+            } else {
+                // Update popup with remaining dataset values
+                const popupContent = `
+                    <b>OA Code:</b> ${marker.entry.OA_Code} <br>
+                    ${Object.entries(marker.datasetValues)
+                        .map(([key, value]) => `<b>${key}:</b> ${value}`)
+                        .join("<br>")}
+                `;
+                marker.bindPopup(popupContent);
+            }
+        }
+    });
+
+    // 🔥 Check if any datasets remain in `layerGroups`
+    const remainingDatasets = Object.keys(layerGroups);
+
+    if (remainingDatasets.length === 0) {
+        // No active datasets left, remove ALL high-value flags
+        document.querySelectorAll(".high-value-flag").forEach(flag => flag.remove());
+        console.log("🚨 All High flags removed (No active datasets left)");
+    } else {
+        // Remove only the flags associated with the dataset being toggled off
+        document.querySelectorAll(`.high-value-flag[data-dataset="${dataset}"]`).forEach(flag => flag.remove());
+        console.log(`🚨 High flags removed for dataset: ${dataset}`);
+    }
 }
+
+
 
 // 6️⃣ Group headers (for dropdown categories)
 function groupHeaders(headers) {
