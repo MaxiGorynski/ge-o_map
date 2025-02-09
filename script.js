@@ -162,7 +162,6 @@ async function loadDataset(datasetUrl, key) {
 }
 
 
-// 4️⃣ Add selected dataset layer to the map
 function addLayerToMap(dataset, data) {
     console.log(`📌 Adding layer for ${dataset}`);
 
@@ -170,6 +169,16 @@ function addLayerToMap(dataset, data) {
         console.log(`🆕 Creating new layer group for: ${dataset}`);
         layerGroups[dataset] = L.layerGroup();
     }
+
+    // Extract numerical values for dataset scaling
+    const values = data
+        .map(entry => parseFloat(entry[dataset]))
+        .filter(value => !isNaN(value)); // Remove NaN values
+
+    const minValue = Math.min(...values);
+    const maxValue = Math.max(...values);
+
+    console.log(`📊 Min Value: ${minValue}, Max Value: ${maxValue}`);
 
     data.forEach(entry => {
         try {
@@ -181,11 +190,16 @@ function addLayerToMap(dataset, data) {
                 return;
             }
 
-            const datasetValue = entry[dataset] ?? "N/A"; // Fetch dataset value or default to 'N/A'
+            const datasetValue = parseFloat(entry[dataset]) || 0; // Convert to number, default to 0
+            const normalizedValue = (datasetValue - minValue) / (maxValue - minValue || 1); // Normalize to 0-1
+
+            const color = getBlueColor(normalizedValue); // Get color from gradient
 
             const marker = L.circleMarker([lat, lon], {
                 radius: 5,
-                color: "blue",
+                color: color,
+                fillColor: color,
+                fillOpacity: 0.8
             });
 
             marker.entry = entry;
@@ -202,6 +216,18 @@ function addLayerToMap(dataset, data) {
 
     console.log(`🗂️ Layer Group Updated: ${dataset}`, layerGroups[dataset]);
     map.addLayer(layerGroups[dataset]);
+}
+
+// 🎨 Function to generate a blue color gradient from light blue (low values) to dark blue (high values)
+function getBlueColor(value) {
+    const startColor = [173, 216, 230]; // Light blue (low values)
+    const endColor = [0, 0, 139]; // Dark blue (high values)
+
+    const r = Math.round(startColor[0] + (endColor[0] - startColor[0]) * value);
+    const g = Math.round(startColor[1] + (endColor[1] - startColor[1]) * value);
+    const b = Math.round(startColor[2] + (endColor[2] - startColor[2]) * value);
+
+    return `rgb(${r}, ${g}, ${b})`;
 }
 
 
