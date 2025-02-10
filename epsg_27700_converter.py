@@ -1,38 +1,69 @@
-import pandas as pd
-from pyproj import Transformer
+import xml.etree.ElementTree as ET
+import json
 
-# File path
-csv_file = "/Users/supriyarai/Code/ge-o_map/Scotland_Census-2022-OA-Modded/UV102b - Age (20) by sex - Basic.csv"
+# File path placeholder
+GML_FILE_PATH = "/Users/supriyarai/Code/ge-o_map/bdline_gml3_gb/Data/INSPIRE_AdministrativeUnit.gml"
+OUTPUT_JSON_PATH = "static/epsg27700_boundaries.json"
 
-# Initialize the transformer for EPSG:4326 (WGS84) -> EPSG:27700 (British National Grid)
-transformer = Transformer.from_crs("EPSG:4326", "EPSG:27700", always_xy=True)
+def extract_epsg27700_coordinates(gml_file):
+    print("🔄 Extracting EPSG:27700 coordinates from GML file...")
 
-# Load the CSV file into a DataFrame
-df = pd.read_csv(csv_file)
+    # Parse the GML file
+    tree = ET.parse(gml_file)
+    root = tree.getroot()
 
-# Check if columns for Latitude and Longitude exist (adjust column names as per the actual file)
-lat_col = "Latitude"  # Replace with the actual column name for Latitude in your CSV
-lon_col = "Longitude"  # Replace with the actual column name for Longitude in your CSV
+    # Define namespace mappings (modify as needed)
+    namespaces = {
+        "gml": "http://www.opengis.net/gml/3.2",
+        "au": "http://inspire.ec.europa.eu/schemas/au/4.0",
+    }
 
-if lat_col not in df.columns or lon_col not in df.columns:
-    raise ValueError(f"Columns '{lat_col}' and '{lon_col}' must exist in the CSV file.")
+    geojson_data = {
+        "type": "FeatureCollection",
+        "features": []
+    }
 
-# Perform the coordinate transformation
-def convert_to_epsg27700(lat, lon):
-    """Convert Latitude and Longitude to EPSG:27700 coordinates."""
-    if pd.notna(lat) and pd.notna(lon):  # Only process non-null values
-        easting, northing = transformer.transform(lon, lat)  # Note: Transformer expects lon, lat order
-        return easting, northing
-    return None, None
+    # Find all administrative units (boundaries)
+    units = root.findall(".//au:AdministrativeUnit", namespaces)
+    total_units = len(units)
 
-# Apply the transformation and create new columns
-df[['Easting', 'Northing']] = df.apply(
-    lambda row: pd.Series(convert_to_epsg27700(row[lat_col], row[lon_col])),
-    axis=1
-)
+    if total_units == 0:
+        print("❌ No administrative units found! Check your GML structure.")
+        return None
 
-# Save the updated DataFrame back to the CSV file
-output_file = csv_file.replace(".csv", "_with_EPSG27700.csv")
-df.to_csv(output_file, index=False)
+    print(f"📌 Found {total_units} administrative boundaries. Extracting...")
 
-print(f"Updated file with EPSG:27700 coordinates saved to: {output_file}")
+    for idx, unit in enumerate(units, start=1):
+        unit_id = unit.get("{http://www.opengis.net/gml/3.2}id")
+
+        pos_list_element = unit.find(".//gml:posList", namespaces)
+        if pos_list_element is not None:
+            pos_list_text = pos_list_element.text.strip()
+            epsg27700_coords = list(map(float, pos_list_text.split()))
+
+            # Format into GeoJSON structure (no conversion)
+            lat_lon_coords = [[epsg27700_coords[i], epsg27700_coords[i + 1]] for i in range(0, len(epsg27700_coords), 2)]
+
+            feature = {
+                "type": "Feature",
+                "properties": {"unit_id": unit_id},
+                "geometry": {
+                    "type": "Polygon",
+                    "coordinates": [lat_lon_coords]  # Keep as EPSG:27700
+                }
+            }
+            geojson_data["features"].append(feature)
+
+        # Progress logging every 100 entries
+        if idx % 100 == 0:
+            print(f"✅ Processed {idx}/{total_units} boundaries.")
+
+    print(f"✅ Extraction complete! Saving to {OUTPUT_JSON_PATH}")
+
+    with open(OUTPUT_JSON_PATH, "w") as f:
+        json.dump(geojson_data, f, indent=4)
+
+    print(f"🎉 GeoJSON saved as {OUTPUT_JSON_PATH}")
+
+# Run extraction
+extract_epsg27700_coordinates(GML_FILE_PATH)

@@ -1,24 +1,46 @@
-
-
-
-
-
 let map;
 const layerGroups = {}; // Store dataset layers
 
 //1️⃣ Initialise the map (Runs once)
-async function initialiseMap() {
-    console.log("🗺️ Initialising Map...");
+// 🗺️ Initialise Map with EPSG:27700 (British National Grid)
+// 🗺️ Initialise Map with EPSG:27700 (British National Grid)
 
-    map = L.map("map").setView([55.3781, -3.4360], 6);
+function initialiseMap() {
+    console.log("🗺️ Initialising Map with EPSG:27700...");
+
+    // Ensure Proj4Leaflet is available
+    if (!L.Proj) {
+        console.error("❌ Proj4Leaflet is not loaded!");
+        return;
+    }
+
+    // Define EPSG:27700 Projection (British National Grid)
+    const epsg27700 = new L.Proj.CRS(
+        "EPSG:27700",
+        "+proj=tmerc +lat_0=49 +lon_0=-2 +k=0.9996012717 +x_0=400000 +y_0=-100000 +ellps=airy +datum=OSGB36 +units=m +no_defs",
+        {
+            resolutions: [8192, 4096, 2048, 1024, 512, 256, 128, 64, 32, 16, 8, 4, 2, 1, 0.5], // Zoom levels
+            origin: [0, 0]
+        }
+    );
+
+    // Create the map
+    const map = L.map("map", {
+        crs: epsg27700, // Apply EPSG:27700 projection
+        center: [55.3781, -3.4360], // Approx UK center in WGS84
+        zoom: 6
+    });
 
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
         maxZoom: 19,
         attribution: "© OpenStreetMap contributors",
     }).addTo(map);
 
-    console.log("✅ Map initialised.");
+    console.log("✅ Map initialised with EPSG:27700!");
 }
+
+
+
 
 // 2️⃣ Populate dataset list in the UI
 async function populateDatasetList() {
@@ -36,7 +58,7 @@ async function populateDatasetList() {
         console.log("📄 Raw HTML fetched:", htmlText.substring(0, 500));
 
         const htmlDoc = parser.parseFromString(htmlText, "text/html");
-        const links = [...htmlDoc.querySelectorAll("a[href$='.json']")];
+        let links = [...htmlDoc.querySelectorAll("a[href$='.json']")];
         console.log(`🔗 Found ${links.length} dataset links.`);
 
         const datasetList = document.getElementById("dataset-list");
@@ -47,82 +69,34 @@ async function populateDatasetList() {
 
         datasetList.innerHTML = ""; // Clear previous entries
 
+        // Sort numerically instead of lexicographically
+        links.sort((a, b) => {
+            const numA = parseInt(a.textContent.match(/\d+/) || "0", 10);
+            const numB = parseInt(b.textContent.match(/\d+/) || "0", 10);
+            return numA - numB;
+        });
+
         links.forEach(link => {
-            const datasetName = link.textContent;
-            const datasetUrl = `http://localhost:8000/Map_JSON/${datasetName}`;
-            console.log(`➕ Adding dataset: ${datasetName} (${datasetUrl})`);
+            const datasetName = link.textContent; // Keep original filename for URL
+            const datasetUrl = `http://localhost:8000/Map_JSON/${datasetName}`; // URL must match the file
 
-            // Wrapper to ensure button and dropdown stack properly
-            const buttonContainer = document.createElement("div");
-            buttonContainer.classList.add("dataset-item");
+            const displayName = datasetName.replace(".json", "").replace(/_/g, " "); // Cleaned name
+            console.log(`➕ Adding dataset: ${displayName} (${datasetUrl})`);
 
-            // Dataset button
             const button = document.createElement("button");
-            button.textContent = datasetName.replace(".json", "").replace(/_/g, " ");
-            button.style.textAlign = "left";
-            button.style.width = "100%";
+            button.textContent = displayName;
+            button.dataset.dataset = datasetName; // Store dataset key in button attribute
+            button.style.textAlign = "left"; // Align button text to the left
+            button.style.display = "block"; // Ensure buttons stack vertically
+            button.style.width = "100%"; // Make buttons full width
+            button.style.marginBottom = "5px"; // Add spacing between buttons
 
-            // Dropdown for dataset fields (hidden initially)
-            const dropdown = document.createElement("div");
-            dropdown.classList.add("dropdown-content");
-            dropdown.style.display = "none";
-
-            // Event listener to handle dataset loading
-            button.addEventListener("click", async () => {
+            button.addEventListener("click", () => {
                 console.log(`🖱️ Clicked: ${datasetName}`);
-
-                // Close any open dropdowns before opening a new one
-                document.querySelectorAll(".dropdown-content").forEach(el => {
-                    if (el !== dropdown) el.style.display = "none";
-                });
-
-                if (dropdown.style.display === "none") {
-                    dropdown.style.display = "block"; // Show dropdown
-
-                    // Load dataset and populate dropdown
-                    dropdown.innerHTML = "<p>Loading...</p>"; // Temporary loading message
-                    const groupedHeaders = await loadDataset(datasetUrl, datasetName);
-                    if (!groupedHeaders) return;
-
-                    dropdown.innerHTML = ""; // Clear previous content
-
-                    Object.keys(groupedHeaders).forEach(category => {
-                        const details = document.createElement("details");
-                        const summary = document.createElement("summary");
-                        summary.textContent = category;
-                        details.appendChild(summary);
-
-                        groupedHeaders[category].forEach(dataset => {
-                            const label = document.createElement("label");
-                            const checkbox = document.createElement("input");
-                            checkbox.type = "checkbox";
-                            checkbox.setAttribute("data-dataset", dataset);
-
-                            checkbox.addEventListener("change", () => {
-                                console.log(`🔀 Checkbox changed: ${dataset}, Checked: ${checkbox.checked}`);
-                                checkbox.checked ? fetchDataset(dataset) : removeDataset(dataset);
-                            });
-
-                            label.appendChild(checkbox);
-                            label.appendChild(document.createTextNode(dataset));
-
-                            const wrapper = document.createElement("div");
-                            wrapper.appendChild(label);
-                            details.appendChild(wrapper);
-                        });
-
-                        dropdown.appendChild(details);
-                    });
-
-                    console.log(`📂 Inserted dropdown under: ${datasetName}`);
-                } else {
-                    dropdown.style.display = "none"; // Hide dropdown if already open
-                }
+                loadDataset(datasetUrl, datasetName); // Ensure proper dataset loading
             });
 
-            buttonContainer.appendChild(button);
-            buttonContainer.appendChild(dropdown);
-            datasetList.appendChild(buttonContainer);
+            datasetList.appendChild(button);
         });
 
         console.log("✅ Dataset list updated in DOM.");
@@ -152,36 +126,41 @@ async function loadDataset(datasetUrl, key) {
         }
 
         console.log(`✅ Successfully loaded ${key} (${data.length} entries)`);
-        console.log("🔍 First entry:", data[0]); // Log the first entry for debugging
+        console.log("🔍 First entry:", data[0]);
 
-        const controlsContainer = document.getElementById("data-controls");
-        if (!controlsContainer) {
-            console.error("❌ Element #data-controls not found in DOM.");
+        const datasetButton = document.querySelector(`button[data-dataset="${key}"]`);
+        if (!datasetButton) {
+            console.error(`❌ Button for dataset ${key} not found.`);
             return;
         }
 
-        controlsContainer.innerHTML = ""; // Clear previous dataset controls
+        // 🔥 Remove any existing dropdowns for this dataset
+        const existingDropdown = datasetButton.nextElementSibling;
+        if (existingDropdown && existingDropdown.classList.contains("dropdown-container")) {
+            existingDropdown.remove();
+            return; // If dropdown exists, remove it and return
+        }
 
-        // 🔥 Extract dataset headers (excluding non-relevant keys)
+        // 🔥 Extract and group dataset headers
         const headers = Object.keys(data[0]).filter(
             key => key !== "OA_Code" && key !== "Latitude" && key !== "Longitude"
         );
 
-        // 🔥 Group dataset fields for better organization
         const groupedHeaders = groupHeaders(headers);
         console.log("📂 Grouped headers:", Object.keys(groupedHeaders));
 
-        // 🔥 Dynamically create checkboxes under categorized dropdowns
+        // 🔥 Create a dropdown container
+        const dropdownContainer = document.createElement("div");
+        dropdownContainer.classList.add("dropdown-container");
+
         Object.entries(groupedHeaders).forEach(([category, datasets]) => {
             console.log(`📁 Creating category: ${category}`);
 
-            // Create a collapsible section for each category
             const details = document.createElement("details");
             const summary = document.createElement("summary");
             summary.textContent = category;
             details.appendChild(summary);
 
-            // Dropdown container
             const dropdown = document.createElement("div");
             dropdown.classList.add("dropdown-content");
 
@@ -203,27 +182,28 @@ async function loadDataset(datasetUrl, key) {
                 label.appendChild(checkbox);
                 label.appendChild(document.createTextNode(` ${dataset}`));
 
-                // ✅ Append checkbox with a line break for clarity
                 dropdown.appendChild(label);
                 dropdown.appendChild(document.createElement("br"));
             });
 
             details.appendChild(dropdown);
-            controlsContainer.appendChild(details);
-            console.log(`✅ Category added: ${category}`);
+            dropdownContainer.appendChild(details);
         });
 
-        return groupedHeaders; // Return grouped data for further processing if needed
+        // ✅ Insert dropdown **right below** the clicked dataset button
+        datasetButton.insertAdjacentElement("afterend", dropdownContainer);
+
+        console.log(`✅ Dropdown inserted for ${key}`);
 
     } catch (error) {
         console.error("❌ Error loading dataset:", error);
-        return null;
     }
 }
 
 
 
-// 4️⃣ Add selected dataset layer to the map
+const markerMap = {}; // 🏷️ Global object to store markers by OA_Code
+
 function addLayerToMap(dataset, data) {
     console.log(`📌 Adding layer for ${dataset}`);
 
@@ -232,30 +212,67 @@ function addLayerToMap(dataset, data) {
         layerGroups[dataset] = L.layerGroup();
     }
 
+    // Extract numerical values for dataset scaling
+    const values = data
+        .map(entry => parseFloat(entry[dataset]))
+        .filter(value => !isNaN(value))
+        .sort((a, b) => a - b);
+
+    if (values.length === 0) {
+        console.warn("⚠️ No valid numerical values found for dataset:", dataset);
+        return;
+    }
+
+    const minValue = values[0];
+    const maxValue = values[values.length - 1];
+    const top5Threshold = values[Math.floor(values.length * 0.95)]; // 95th percentile value
+
+    console.log(`📊 Min: ${minValue}, Max: ${maxValue}, 95th Percentile Threshold: ${top5Threshold}`);
+
     data.forEach(entry => {
         try {
             const lat = parseFloat(entry.Latitude);
             const lon = parseFloat(entry.Longitude);
+            const datasetValue = parseFloat(entry[dataset]) || 0;
 
             if (isNaN(lat) || isNaN(lon)) {
                 console.warn("❌ Skipping invalid lat/lon:", entry);
                 return;
             }
 
-            const datasetValue = entry[dataset] ?? "N/A"; // Fetch dataset value or default to 'N/A'
+            // Check if a marker already exists for this OA_Code
+            if (!markerMap[entry.OA_Code]) {
+                const marker = L.circleMarker([lat, lon], {
+                    radius: 5,
+                    color: getMagentaColour((datasetValue - minValue) / (maxValue - minValue || 1)),
+                    fillColor: getMagentaColour((datasetValue - minValue) / (maxValue - minValue || 1)),
+                    fillOpacity: 0.8
+                });
 
-            const marker = L.circleMarker([lat, lon], {
-                radius: 5,
-                color: "blue",
-            });
+                marker.entry = entry;
+                marker.datasetValues = {}; // Store dataset values for multiple toggles
+                markerMap[entry.OA_Code] = marker;
+                layerGroups[dataset].addLayer(marker);
+            }
 
-            marker.entry = entry;
-            marker.bindPopup(`
+            // Update marker with new dataset value
+            const marker = markerMap[entry.OA_Code];
+            marker.datasetValues[dataset] = datasetValue;
+
+            // Update popup to include all active datasets
+            const popupContent = `
                 <b>OA Code:</b> ${entry.OA_Code} <br>
-                <b>${dataset}:</b> ${datasetValue}
-            `);
+                ${Object.entries(marker.datasetValues)
+                    .map(([key, value]) => `<b>${key}:</b> ${value}`)
+                    .join("<br>")}
+            `;
+            marker.bindPopup(popupContent);
 
-            layerGroups[dataset].addLayer(marker);
+            // 🔥 If this entry is in the top 5%, add a flag right on top of it
+            if (datasetValue >= top5Threshold) {
+                placeHighValueFlag(lat, lon);
+            }
+
         } catch (markerError) {
             console.error(`❌ Error processing entry in ${dataset}:`, markerError);
         }
@@ -265,8 +282,46 @@ function addLayerToMap(dataset, data) {
     map.addLayer(layerGroups[dataset]);
 }
 
+const flagMarkers = {}; // Global storage for high-value flags
 
-// 5️⃣ Remove dataset layer from the map
+// 🚩 Function to place a "High" flag on high-value markers (Green Flag)
+function placeHighValueFlag(lat, lon, dataset) {
+    console.log(`🚩 Placing "High" flag for ${dataset} at: (${lat}, ${lon})`);
+
+    // Slightly offset the flag so it doesn't overlap with the marker
+    const offsetLat = lat + 0.0008; // Small northward shift
+    const offsetLon = lon + 0.0008; // Small eastward shift
+
+    const flag = L.marker([offsetLat, offsetLon], {
+        icon: L.icon({
+            iconUrl: '/static/green_flag.png', // Ensure this path is accessible via your server
+            iconSize: [15, 15], // Adjust size
+            iconAnchor: [15, 30], // Adjust positioning
+            popupAnchor: [0, -30] // Adjust popup position
+        })
+    }).addTo(map);
+
+    // Store flag in global object for removal later
+    if (!flagMarkers[dataset]) {
+        flagMarkers[dataset] = [];
+    }
+    flagMarkers[dataset].push(flag);
+}
+
+// 🎨 Function to generate a magenta colour gradient from light magenta (low values) to dark magenta (high values)
+function getMagentaColour(value) {
+    const startColor = [255, 182, 193]; // Light magenta (light pink) for low values
+    const endColor = [139, 0, 139]; // Dark magenta for high values
+
+    const r = Math.round(startColor[0] + (endColor[0] - startColor[0]) * value);
+    const g = Math.round(startColor[1] + (endColor[1] - startColor[1]) * value);
+    const b = Math.round(startColor[2] + (endColor[2] - startColor[2]) * value);
+
+    return `rgb(${r}, ${g}, ${b})`;
+}
+
+// 5️⃣ Remove dataset layer from the map, including "High" flags
+// 5️⃣ Remove dataset layer from the map, including "High" flags
 function removeLayerFromMap(dataset) {
     console.log(`🗑️ Removing layer for ${dataset}`);
 
@@ -274,7 +329,87 @@ function removeLayerFromMap(dataset) {
         map.removeLayer(layerGroups[dataset]);
         delete layerGroups[dataset];
     }
+
+    // Remove dataset values from marker popups but keep other datasets
+    Object.values(markerMap).forEach(marker => {
+        if (marker.datasetValues && dataset in marker.datasetValues) {
+            delete marker.datasetValues[dataset];
+
+            // If no datasets remain in the marker, remove it from the map
+            if (Object.keys(marker.datasetValues).length === 0) {
+                map.removeLayer(marker);
+                delete markerMap[marker.entry.OA_Code];
+            } else {
+                // Update popup with remaining dataset values
+                const popupContent = `
+                    <b>OA Code:</b> ${marker.entry.OA_Code} <br>
+                    ${Object.entries(marker.datasetValues)
+                        .map(([key, value]) => `<b>${key}:</b> ${value}`)
+                        .join("<br>")}
+                `;
+                marker.bindPopup(popupContent);
+            }
+        }
+    });
+
+    // 🔥 Remove all flags associated with this dataset
+    if (flagMarkers[dataset]) {
+        flagMarkers[dataset].forEach(flag => map.removeLayer(flag));
+        delete flagMarkers[dataset];
+        console.log(`🚨 Removed all High flags for dataset: ${dataset}`);
+    }
+
+    // 🔥 Check if any datasets remain
+    if (Object.keys(layerGroups).length === 0) {
+        clearAllFlags(); // New function to remove all flags if no datasets remain
+    }
 }
+
+// 🚨 Function to remove all high-value flags when no datasets remain
+function clearAllFlags() {
+    Object.values(flagMarkers).forEach(datasetFlags => {
+        datasetFlags.forEach(flag => map.removeLayer(flag));
+    });
+
+    flagMarkers = {}; // Reset storage
+    console.log("🚨 All high-value flags removed (No active datasets left)");
+}
+
+
+
+// 6️⃣ New Function: Clear all layers at once
+function clearAllLayers() {
+    console.log("🗑️ Clearing ALL layers!");
+
+    // Remove all dataset layers from map
+    Object.keys(layerGroups).forEach(dataset => {
+        if (layerGroups[dataset]) {
+            map.removeLayer(layerGroups[dataset]);
+            delete layerGroups[dataset];
+        }
+    });
+
+    // Remove all markers from map
+    Object.keys(markerMap).forEach(key => {
+        if (markerMap[key]) {
+            map.removeLayer(markerMap[key]);
+            delete markerMap[key];
+        }
+    });
+
+    // Remove all high-value flags using Leaflet's removeLayer
+    Object.values(flagMarkers).forEach(datasetFlags => {
+        datasetFlags.forEach(flag => {
+            map.removeLayer(flag);
+        });
+    });
+
+    // Reset storage for flags
+    flagMarkers = {};
+
+    console.log("🚨 All layers, markers, and high-value flags have been cleared.");
+}
+
 
 // 6️⃣ Group headers (for dropdown categories)
 function groupHeaders(headers) {
@@ -305,11 +440,91 @@ function groupHeaders(headers) {
     return groups;
 }
 
+async function loadConstituencyBoundaries() {
+    console.log("📌 Loading constituency boundaries...");
+
+    try {
+        const response = await fetch("http://localhost:8000/static/epsg27700_boundaries.json");
+
+        console.log("📥 Response received:", response);
+
+        if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
+
+        const data = await response.json();
+        console.log(`✅ Successfully loaded ${data.features.length} constituency boundaries.`);
+
+        if (!data || !data.features || data.features.length === 0) {
+            console.warn("⚠️ No valid boundary data found!");
+            return;
+        }
+
+        // Define the conversion from EPSG:27700 (British Grid) to EPSG:4326 (WGS84)
+        const transformCoords = (coords) => {
+            const [easting, northing] = coords;
+            try {
+                const [lon, lat] = proj4("EPSG:27700", "EPSG:4326", [easting, northing]);
+                return new L.LatLng(lat, lon);
+            } catch (projError) {
+                console.error("❌ Projection error:", projError, "for coordinates:", coords);
+                return null;
+            }
+        };
+
+        // Create a Leaflet GeoJSON layer with transformed coordinates
+        const constituencyLayer = L.geoJSON(data, {
+            style: () => ({
+                color: "#ff6600", // Orange border
+                weight: 2,
+                fillOpacity: 0.1,
+            }),
+            coordsToLatLng: transformCoords // Convert EPSG:27700 to WGS84
+        });
+
+        constituencyLayer.addTo(map);
+        console.log("✅ Constituency boundaries successfully added to the map!");
+
+    } catch (error) {
+        console.error("❌ Error loading constituency boundaries:", error);
+    }
+}
+
 
 
 // 7️⃣ Run everything in the correct order when the page loads
 document.addEventListener("DOMContentLoaded", async () => {
-    console.log("📌 DOM fully loaded. Initialising...");
-    initialiseMap();  // 🌍 Step 1: Start the map
+    console.log("📌 DOM fully loaded. Initializing...");
+
+    function waitForProj4Leaflet(callback, retries = 5, delay = 1000) {
+        if (typeof L.Proj !== "undefined") {
+            console.log("✅ Proj4Leaflet loaded successfully.");
+            callback();
+        } else if (retries > 0) {
+            console.warn(`⏳ Proj4Leaflet not loaded, retrying in ${delay / 1000}s... (${retries} attempts left)`);
+            setTimeout(() => waitForProj4Leaflet(callback, retries - 1, delay), delay);
+        } else {
+            console.error("❌ Proj4Leaflet failed to load after multiple attempts.");
+        }
+    }
+
+    waitForProj4Leaflet(() => {
+        initialiseMap();  // 🌍 Step 1: Initialize map
+    });
+
+    // ✅ Ensure "Clear All Layers" button exists before adding event listener
+    const clearLayersBtn = document.getElementById("clear-layers-btn");
+    if (clearLayersBtn) {
+        clearLayersBtn.addEventListener("click", () => {
+            clearAllLayers();
+            clearAllFlags(); // 🔥 Also clear all high-value flags
+        });
+        console.log("🧹 Clear All Layers button event listener added.");
+    } else {
+        console.error("❌ Clear All Layers button not found in DOM.");
+    }
+
     await populateDatasetList();  // 📋 Step 2: Populate dataset list
+    await loadConstituencyBoundaries(); // 🏛️ Step 3: Load boundary data
 });
+
+
+
