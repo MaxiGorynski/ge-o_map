@@ -217,8 +217,8 @@ function addLayerToMap(dataset, data) {
             if (!markerMap[entry.OA_Code]) {
                 const marker = L.circleMarker([lat, lon], {
                     radius: 5,
-                    color: getBlueColor((datasetValue - minValue) / (maxValue - minValue || 1)),
-                    fillColor: getBlueColor((datasetValue - minValue) / (maxValue - minValue || 1)),
+                    color: getMagentaColour((datasetValue - minValue) / (maxValue - minValue || 1)),
+                    fillColor: getMagentaColour((datasetValue - minValue) / (maxValue - minValue || 1)),
                     fillOpacity: 0.8
                 });
 
@@ -255,27 +255,36 @@ function addLayerToMap(dataset, data) {
     map.addLayer(layerGroups[dataset]);
 }
 
-// 🚩 Function to place a "High" flag next to high-value markers
-function placeHighValueFlag(lat, lon) {
-    console.log(`🚩 Placing "High" flag at: (${lat}, ${lon})`);
+const flagMarkers = {}; // Global storage for high-value flags
+
+// 🚩 Function to place a "High" flag on high-value markers (Green Flag)
+function placeHighValueFlag(lat, lon, dataset) {
+    console.log(`🚩 Placing "High" flag for ${dataset} at: (${lat}, ${lon})`);
 
     // Slightly offset the flag so it doesn't overlap with the marker
     const offsetLat = lat + 0.0008; // Small northward shift
     const offsetLon = lon + 0.0008; // Small eastward shift
 
-    L.marker([offsetLat, offsetLon], {
-        icon: L.divIcon({
-            className: 'high-value-flag',
-            html: '<span style="color: red; font-weight: bold;">🚩 High</span>',
-            iconSize: [30, 30]
+    const flag = L.marker([offsetLat, offsetLon], {
+        icon: L.icon({
+            iconUrl: '/static/green_flag.png', // Ensure this path is accessible via your server
+            iconSize: [15, 15], // Adjust size
+            iconAnchor: [15, 30], // Adjust positioning
+            popupAnchor: [0, -30] // Adjust popup position
         })
     }).addTo(map);
+
+    // Store flag in global object for removal later
+    if (!flagMarkers[dataset]) {
+        flagMarkers[dataset] = [];
+    }
+    flagMarkers[dataset].push(flag);
 }
 
-// 🎨 Function to generate a blue color gradient from light blue (low values) to dark blue (high values)
-function getBlueColor(value) {
-    const startColor = [173, 216, 230]; // Light blue (low values)
-    const endColor = [0, 0, 139]; // Dark blue (high values)
+// 🎨 Function to generate a magenta colour gradient from light magenta (low values) to dark magenta (high values)
+function getMagentaColour(value) {
+    const startColor = [255, 182, 193]; // Light magenta (light pink) for low values
+    const endColor = [139, 0, 139]; // Dark magenta for high values
 
     const r = Math.round(startColor[0] + (endColor[0] - startColor[0]) * value);
     const g = Math.round(startColor[1] + (endColor[1] - startColor[1]) * value);
@@ -284,9 +293,7 @@ function getBlueColor(value) {
     return `rgb(${r}, ${g}, ${b})`;
 }
 
-
-
-
+// 5️⃣ Remove dataset layer from the map, including "High" flags
 // 5️⃣ Remove dataset layer from the map, including "High" flags
 function removeLayerFromMap(dataset) {
     console.log(`🗑️ Removing layer for ${dataset}`);
@@ -318,39 +325,64 @@ function removeLayerFromMap(dataset) {
         }
     });
 
-    // 🔥 Check if any datasets remain in `layerGroups`
-    const remainingDatasets = Object.keys(layerGroups);
+    // 🔥 Remove all flags associated with this dataset
+    if (flagMarkers[dataset]) {
+        flagMarkers[dataset].forEach(flag => map.removeLayer(flag));
+        delete flagMarkers[dataset];
+        console.log(`🚨 Removed all High flags for dataset: ${dataset}`);
+    }
 
-    if (remainingDatasets.length === 0) {
-        clearAllLayers(); // Call new function to clear everything
-    } else {
-        // Remove only the flags associated with the dataset being toggled off
-        document.querySelectorAll(`.high-value-flag[data-dataset="${dataset}"]`).forEach(flag => flag.remove());
-        console.log(`🚨 High flags removed for dataset: ${dataset}`);
+    // 🔥 Check if any datasets remain
+    if (Object.keys(layerGroups).length === 0) {
+        clearAllFlags(); // New function to remove all flags if no datasets remain
     }
 }
+
+// 🚨 Function to remove all high-value flags when no datasets remain
+function clearAllFlags() {
+    Object.values(flagMarkers).forEach(datasetFlags => {
+        datasetFlags.forEach(flag => map.removeLayer(flag));
+    });
+
+    flagMarkers = {}; // Reset storage
+    console.log("🚨 All high-value flags removed (No active datasets left)");
+}
+
+
 
 // 6️⃣ New Function: Clear all layers at once
 function clearAllLayers() {
     console.log("🗑️ Clearing ALL layers!");
 
-    // Remove all layers from map
+    // Remove all dataset layers from map
     Object.keys(layerGroups).forEach(dataset => {
-        map.removeLayer(layerGroups[dataset]);
-        delete layerGroups[dataset];
+        if (layerGroups[dataset]) {
+            map.removeLayer(layerGroups[dataset]);
+            delete layerGroups[dataset];
+        }
     });
 
-    // Remove all markers
+    // Remove all markers from map
     Object.keys(markerMap).forEach(key => {
-        map.removeLayer(markerMap[key]);
-        delete markerMap[key];
+        if (markerMap[key]) {
+            map.removeLayer(markerMap[key]);
+            delete markerMap[key];
+        }
     });
 
-    // Remove all high-value flags
-    document.querySelectorAll(".high-value-flag").forEach(flag => flag.remove());
+    // Remove all high-value flags using Leaflet's removeLayer
+    Object.values(flagMarkers).forEach(datasetFlags => {
+        datasetFlags.forEach(flag => {
+            map.removeLayer(flag);
+        });
+    });
 
-    console.log("🚨 All layers, markers, and flags have been cleared.");
+    // Reset storage for flags
+    flagMarkers = {};
+
+    console.log("🚨 All layers, markers, and high-value flags have been cleared.");
 }
+
 
 // 6️⃣ Group headers (for dropdown categories)
 function groupHeaders(headers) {
