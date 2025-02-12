@@ -1,6 +1,15 @@
 let map;
 const layerGroups = {}; // Store dataset layers
 
+// ✅ Define EPSG:27700 (British National Grid)
+proj4.defs("EPSG:27700", "+proj=tmerc +lat_0=49 +lon_0=-2 +k=0.9996012717 +x_0=400000 +y_0=-100000 +datum=OSGB36 +units=m +no_defs");
+
+// ✅ Define WGS84 (Standard Lat/Lon format)
+proj4.defs("EPSG:4326", "+proj=longlat +datum=WGS84 +no_defs");
+
+console.log("✅ Proj4 definitions loaded for EPSG:27700 and EPSG:4326");
+
+
 //1️⃣ Initialise the map (Runs once)
 async function initialiseMap() {
     console.log("🗺️ Initialising Map...");
@@ -293,6 +302,91 @@ function getMagentaColour(value) {
     return `rgb(${r}, ${g}, ${b})`;
 }
 
+// ✅ Function to transform EPSG:27700 to WGS84 (Leaflet format)
+function transformCoords(easting, northing) {
+    try {
+        const [lon, lat] = proj4("EPSG:27700", "EPSG:4326", [easting, northing]);
+        return [lat, lon]; // Leaflet expects [lat, lon]
+    } catch (error) {
+        console.error(`❌ Coordinate transformation error: ${error}`);
+        return null;
+    }
+}
+
+async function loadBoundaries() {
+    console.log("📌 Fetching boundary file list...");
+
+    try {
+        // Step 1: Fetch the directory listing from the backend
+        const response = await fetch("/Boundaries_JSON/");
+        if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
+
+        const parser = new DOMParser();
+        const htmlText = await response.text();
+        const htmlDoc = parser.parseFromString(htmlText, "text/html");
+
+        // Step 2: Extract JSON filenames from the directory listing
+        const links = [...htmlDoc.querySelectorAll("a[href$='.json']")];
+        const boundaryFiles = links.map(link => `/Boundaries_JSON/${link.textContent}`);
+
+        console.log(`📌 Found ${boundaryFiles.length} boundary files. Starting loading process...`);
+
+        // Step 3: Load each boundary file and plot it
+        for (const file of boundaryFiles) {
+            try {
+                const boundaryResponse = await fetch(file);
+                if (!boundaryResponse.ok) throw new Error(`HTTP error! Status: ${boundaryResponse.status}`);
+
+                const boundaryData = await boundaryResponse.json();
+                plotBoundary(boundaryData); // ✅ Convert and plot
+
+            } catch (error) {
+                console.error(`❌ Error loading boundary file: ${file}`, error);
+            }
+        }
+
+        console.log("✅ All boundaries processed successfully.");
+
+    } catch (error) {
+        console.error("❌ Error fetching boundary files:", error);
+    }
+}
+
+
+
+async function plotBoundary(boundaryData) {
+    console.log("📌 Plotting boundary:", boundaryData);
+
+    if (!boundaryData.geometry || !boundaryData.geometry.coordinates) {
+        console.error("❌ Invalid boundary data format:", boundaryData);
+        return;
+    }
+
+    // 🔥 Convert all coordinate points using transformCoords
+    const transformedCoordinates = boundaryData.geometry.coordinates[0].map(coord => {
+        const [easting, northing] = coord;
+        const transformed = transformCoords(easting, northing);
+        console.log(`📍 Original: ${coord} → Transformed: ${transformed}`);
+        return transformed;
+    }).filter(Boolean); // Remove any null values from failed transformations
+
+    if (transformedCoordinates.length === 0) {
+        console.error("❌ No valid transformed coordinates found for:", boundaryData);
+        return;
+    }
+
+    // ✅ Plot transformed polygon on the map
+    const boundaryLayer = L.polygon(transformedCoordinates, {
+        color: "red",
+        weight: 2,
+        fillOpacity: 0.1
+    }).addTo(map);
+
+    console.log("✅ Boundary added:", boundaryLayer);
+}
+
+
+
 // 5️⃣ Remove dataset layer from the map, including "High" flags
 // 5️⃣ Remove dataset layer from the map, including "High" flags
 function removeLayerFromMap(dataset) {
@@ -428,4 +522,6 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     initialiseMap();  // 🌍 Step 1: Start the map
     await populateDatasetList();  // 📋 Step 2: Populate dataset list
+    loadBoundaries(); // Step 3: Load Constituency Boundaries
+
 });
