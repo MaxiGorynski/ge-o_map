@@ -194,12 +194,31 @@ const markerMap = {}; // 🏷️ Global object to store markers by OA_Code
 function addLayerToMap(dataset, data) {
     console.log(`📌 Adding layer for ${dataset}`);
 
-    if (!layerGroups[dataset]) {
-        console.log(`🆕 Creating new layer group for: ${dataset}`);
-        layerGroups[dataset] = L.layerGroup();
+    // ✅ Ensure `window.map` exists
+    if (!window.map) {
+        console.error("❌ ERROR: `window.map` is not defined. Cannot proceed with addLayerToMap.");
+        return;
     }
 
-    // Extract numerical values for dataset scaling
+    // ✅ Ensure `layerGroups[dataset]` is initialized
+    if (!layerGroups[dataset]) {
+        console.warn(`⚠️ layerGroups[${dataset}] was undefined. Initializing...`);
+        layerGroups[dataset] = L.layerGroup();
+        window.map.addLayer(layerGroups[dataset]); // ✅ Ensure it's added to map
+    }
+
+    if (!layerGroups[dataset]) {
+        console.error(`❌ layerGroups[${dataset}] is STILL undefined after initialization!`);
+        return;
+    }
+
+    // ✅ Debugging Logs
+    console.log(`📌 Adding dataset layer: ${dataset}`);
+    console.log("   🗺️ window.map:", window.map);
+    console.log("   📂 layerGroups:", layerGroups);
+    console.log("   🔗 dataset:", dataset);
+
+    // ✅ Extract numerical values for dataset scaling
     const values = data
         .map(entry => parseFloat(entry[dataset]))
         .filter(value => !isNaN(value))
@@ -227,7 +246,9 @@ function addLayerToMap(dataset, data) {
                 return;
             }
 
-            // Check if a marker already exists for this OA_Code
+            console.log("🔍 Entry before skipping:", entry);
+
+            // ✅ Check if marker already exists
             if (!markerMap[entry.OA_Code]) {
                 const marker = L.circleMarker([lat, lon], {
                     radius: 5,
@@ -239,14 +260,26 @@ function addLayerToMap(dataset, data) {
                 marker.entry = entry;
                 marker.datasetValues = {}; // Store dataset values for multiple toggles
                 markerMap[entry.OA_Code] = marker;
+
+                // ✅ Ensure `layerGroups[dataset]` exists before adding a layer
+                if (!layerGroups[dataset]) {
+                    console.error(`❌ layerGroups[${dataset}] is undefined.`);
+                    return;
+                }
+
+                if (!marker) {
+                    console.error(`❌ marker is undefined for dataset: ${dataset}`);
+                    return;
+                }
+
                 layerGroups[dataset].addLayer(marker);
             }
 
-            // Update marker with new dataset value
+            // ✅ Update marker
             const marker = markerMap[entry.OA_Code];
             marker.datasetValues[dataset] = datasetValue;
 
-            // Update popup to include all active datasets
+            // ✅ Update popup with all active datasets
             const popupContent = `
                 <b>OA Code:</b> ${entry.OA_Code} <br>
                 ${Object.entries(marker.datasetValues)
@@ -255,7 +288,7 @@ function addLayerToMap(dataset, data) {
             `;
             marker.bindPopup(popupContent);
 
-            // 🔥 If this entry is in the top 5%, add a flag right on top of it
+            // ✅ Add a flag if this entry is in the top 5%
             if (datasetValue >= top5Threshold) {
                 placeHighValueFlag(lat, lon);
             }
@@ -266,14 +299,32 @@ function addLayerToMap(dataset, data) {
     });
 
     console.log(`🗂️ Layer Group Updated: ${dataset}`, layerGroups[dataset]);
-    map.addLayer(layerGroups[dataset]);
+    window.map.addLayer(layerGroups[dataset]); // ✅ Now safe to add
+
 }
+
 
 const flagMarkers = {}; // Global storage for high-value flags
 
 // 🚩 Function to place a "High" flag on high-value markers (Green Flag)
 function placeHighValueFlag(lat, lon, dataset) {
     console.log(`🚩 Placing "High" flag for ${dataset} at: (${lat}, ${lon})`);
+
+    // ✅ Ensure `window.map` exists
+    if (!window.map) {
+        console.error("❌ ERROR: `window.map` is not defined. Cannot place high-value flag.");
+        return;
+    }
+
+    // ✅ Ensure `flagMarkers` object exists
+    if (!window.flagMarkers) {
+        window.flagMarkers = {};
+    }
+
+    // ✅ Ensure `flagMarkers[dataset]` exists
+    if (!window.flagMarkers[dataset]) {
+        window.flagMarkers[dataset] = [];
+    }
 
     // Slightly offset the flag so it doesn't overlap with the marker
     const offsetLat = lat + 0.0008; // Small northward shift
@@ -286,14 +337,14 @@ function placeHighValueFlag(lat, lon, dataset) {
             iconAnchor: [15, 30], // Adjust positioning
             popupAnchor: [0, -30] // Adjust popup position
         })
-    }).addTo(map);
+    }).addTo(window.map); // ✅ Now safely adding to the map
 
-    // Store flag in global object for removal later
-    if (!flagMarkers[dataset]) {
-        flagMarkers[dataset] = [];
-    }
-    flagMarkers[dataset].push(flag);
+    // ✅ Store flag in `window.flagMarkers` for removal later
+    window.flagMarkers[dataset].push(flag);
+
+    console.log(`✅ Successfully placed "High" flag for ${dataset} at (${offsetLat}, ${offsetLon}).`);
 }
+
 
 // 🎨 Function to generate a magenta colour gradient from light magenta (low values) to dark magenta (high values)
 function getMagentaColour(value) {
@@ -307,132 +358,82 @@ function getMagentaColour(value) {
     return `rgb(${r}, ${g}, ${b})`;
 }
 
-// ✅ Function to transform EPSG:27700 to WGS84 (Leaflet format)
-function transformCoords(easting, northing) {
-    try {
-        const [lon, lat] = proj4("EPSG:27700", "EPSG:4326", [easting, northing]);
-        return [lat, lon]; // Leaflet expects [lat, lon]
-    } catch (error) {
-        console.error(`❌ Coordinate transformation error: ${error}`);
-        return null;
-    }
-}
+// 🚨 Function to clear ALL layers from the map safely, including data markers
+function clearAllLayers() {
+    console.log("🗑️ Clearing ALL layers!");
 
-async function loadBoundaries() {
-    console.log("📌 Fetching boundary file list...");
-
-    try {
-        // Step 1: Fetch the directory listing from the backend
-        const response = await fetch("/Boundaries_JSON/");
-        if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
-
-        const parser = new DOMParser();
-        const htmlText = await response.text();
-        const htmlDoc = parser.parseFromString(htmlText, "text/html");
-
-        // Step 2: Extract JSON filenames from the directory listing
-        const links = [...htmlDoc.querySelectorAll("a[href$='.json']")];
-        const boundaryFiles = links.map(link => `/Boundaries_JSON/${link.textContent}`);
-
-        console.log(`📌 Found ${boundaryFiles.length} boundary files. Starting loading process...`);
-
-        // Step 3: Load each boundary file and plot it
-        for (const file of boundaryFiles) {
-            try {
-                const boundaryResponse = await fetch(file);
-                if (!boundaryResponse.ok) throw new Error(`HTTP error! Status: ${boundaryResponse.status}`);
-
-                const boundaryData = await boundaryResponse.json();
-                plotBoundary(boundaryData); // ✅ Convert and plot
-
-            } catch (error) {
-                console.error(`❌ Error loading boundary file: ${file}`, error);
-            }
-        }
-
-        console.log("✅ All boundaries processed successfully.");
-
-    } catch (error) {
-        console.error("❌ Error fetching boundary files:", error);
-    }
-}
-
-
-
-async function plotBoundary(boundaryData) {
-    console.log("📌 Plotting boundary:", boundaryData);
-
-    if (!boundaryData.geometry || !boundaryData.geometry.coordinates) {
-        console.error("❌ Invalid boundary data format:", boundaryData);
+    // ✅ Ensure `window.map` exists before proceeding
+    if (!window.map) {
+        console.error("❌ ERROR: `window.map` is not defined. Cannot clear layers.");
         return;
     }
 
-    // 🔥 Convert all coordinate points using transformCoords
-    const transformedCoordinates = boundaryData.geometry.coordinates[0].map(coord => {
-        const [easting, northing] = coord;
-        const transformed = transformCoords(easting, northing);
-        console.log(`📍 Original: ${coord} → Transformed: ${transformed}`);
-        return transformed;
-    }).filter(Boolean); // Remove any null values from failed transformations
-
-    if (transformedCoordinates.length === 0) {
-        console.error("❌ No valid transformed coordinates found for:", boundaryData);
-        return;
-    }
-
-    // ✅ Plot transformed polygon on the map
-    const boundaryLayer = L.polygon(transformedCoordinates, {
-        color: "red",
-        weight: 2,
-        fillOpacity: 0.1
-    }).addTo(map);
-
-    console.log("✅ Boundary added:", boundaryLayer);
-}
-
-// 5️⃣ Remove dataset layer from the map, including "High" flags
-function removeLayerFromMap(dataset) {
-    console.log(`🗑️ Removing layer for ${dataset}`);
-
-    if (layerGroups[dataset]) {
-        map.removeLayer(layerGroups[dataset]);
-        delete layerGroups[dataset];
-    }
-
-    // Remove dataset values from marker popups but keep other datasets
-    Object.values(markerMap).forEach(marker => {
-        if (marker.datasetValues && dataset in marker.datasetValues) {
-            delete marker.datasetValues[dataset];
-
-            // If no datasets remain in the marker, remove it from the map
-            if (Object.keys(marker.datasetValues).length === 0) {
-                map.removeLayer(marker);
-                delete markerMap[marker.entry.OA_Code];
-            } else {
-                // Update popup with remaining dataset values
-                const popupContent = `
-                    <b>OA Code:</b> ${marker.entry.OA_Code} <br>
-                    ${Object.entries(marker.datasetValues)
-                        .map(([key, value]) => `<b>${key}:</b> ${value}`)
-                        .join("<br>")}
-                `;
-                marker.bindPopup(popupContent);
+    // ✅ Ensure `window.layerGroups` is initialized before removing layers
+    if (!window.layerGroups || Object.keys(window.layerGroups).length === 0) {
+        console.warn("⚠️ No layer groups found to remove.");
+    } else {
+        Object.keys(window.layerGroups).forEach(dataset => {
+            if (window.layerGroups[dataset]) {
+                console.log(`🗑️ Removing dataset layer: ${dataset}`);
+                try {
+                    window.map.removeLayer(window.layerGroups[dataset]);
+                } catch (error) {
+                    console.error(`❌ Failed to remove layer group: ${dataset}`, error);
+                }
             }
-        }
-    });
+        });
 
-    // 🔥 Remove all flags associated with this dataset
-    if (flagMarkers[dataset]) {
-        flagMarkers[dataset].forEach(flag => map.removeLayer(flag));
-        delete flagMarkers[dataset];
-        console.log(`🚨 Removed all High flags for dataset: ${dataset}`);
+        // ✅ Reset `window.layerGroups`
+        window.layerGroups = {};
     }
 
-    // 🔥 Check if any datasets remain
-    if (Object.keys(layerGroups).length === 0) {
-        clearAllFlags(); // New function to remove all flags if no datasets remain
+    // ✅ Ensure `window.flagMarkers` is initialized before removing flags
+    if (!window.flagMarkers || Object.keys(window.flagMarkers).length === 0) {
+        console.warn("⚠️ No flag markers found to remove.");
+    } else {
+        Object.keys(window.flagMarkers).forEach(dataset => {
+            if (window.flagMarkers[dataset]) {
+                console.log(`🚨 Removing flags for dataset: ${dataset}`);
+                window.flagMarkers[dataset].forEach(flag => {
+                    try {
+                        window.map.removeLayer(flag);
+                    } catch (error) {
+                        console.error(`❌ Failed to remove flag for dataset: ${dataset}`, error);
+                    }
+                });
+            }
+        });
+
+        // ✅ Reset `window.flagMarkers`
+        window.flagMarkers = {};
     }
+
+    // ✅ Ensure `window.markerMap` exists before attempting to clear markers
+    if (!window.markerMap || Object.keys(window.markerMap).length === 0) {
+        console.warn("⚠️ No data markers found to remove.");
+    } else {
+        Object.keys(window.markerMap).forEach(oaCode => {
+            const marker = window.markerMap[oaCode];
+            if (marker) {
+                console.log(`🗑️ Removing marker for OA_Code: ${oaCode}`);
+                try {
+                    window.map.removeLayer(marker);
+                } catch (error) {
+                    console.error(`❌ Failed to remove marker: ${oaCode}`, error);
+                }
+            }
+        });
+
+        // ✅ Reset `window.markerMap`
+        window.markerMap = {};
+    }
+
+    console.log("🧹 All layers, markers, and flags successfully cleared!");
 }
+
+
+
+
 
 // 🚨 Function to remove all high-value flags when no datasets remain
 function clearAllFlags() {
@@ -442,41 +443,6 @@ function clearAllFlags() {
 
     flagMarkers = {}; // Reset storage
     console.log("🚨 All high-value flags removed (No active datasets left)");
-}
-
-
-
-// 6️⃣ New Function: Clear all layers at once
-function clearAllLayers() {
-    console.log("🗑️ Clearing ALL layers!");
-
-    // Remove all dataset layers from map
-    Object.keys(layerGroups).forEach(dataset => {
-        if (layerGroups[dataset]) {
-            map.removeLayer(layerGroups[dataset]);
-            delete layerGroups[dataset];
-        }
-    });
-
-    // Remove all markers from map
-    Object.keys(markerMap).forEach(key => {
-        if (markerMap[key]) {
-            map.removeLayer(markerMap[key]);
-            delete markerMap[key];
-        }
-    });
-
-    // Remove all high-value flags using Leaflet's removeLayer
-    Object.values(flagMarkers).forEach(datasetFlags => {
-        datasetFlags.forEach(flag => {
-            map.removeLayer(flag);
-        });
-    });
-
-    // Reset storage for flags
-    flagMarkers = {};
-
-    console.log("🚨 All layers, markers, and high-value flags have been cleared.");
 }
 
 
