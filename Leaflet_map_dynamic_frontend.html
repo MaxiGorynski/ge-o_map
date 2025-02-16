@@ -53,7 +53,28 @@
         #clear-layers-btn {
             position: fixed; /* Fix it to the screen */
             left: 285px; /* Position it outside the sidebar */
-            top: 50%; /* Center it vertically */
+            top: 33%; /* Center it vertically */
+            transform: translateY(-50%);
+            width: 40px;
+            height: auto;
+            background-color: #e804e8; /* Red for clear action */
+            color: white;
+            border: none;
+            padding: 8px 12px;
+            cursor: pointer;
+            font-size: 12px;
+            writing-mode: vertical-rl; /* Rotate text vertically */
+            text-align: center;
+            font-weight: bold;
+            border-radius: 5px;
+            transition: background 0.3s ease-in-out;
+            z-index: 2000; /* Ensure it's always on top */
+        }
+
+        #const-view-btn {
+            position: fixed; /* Fix it to the screen */
+            left: 285px; /* Position it outside the sidebar */
+            top: 66%; /* Center it vertically */
             transform: translateY(-50%);
             width: 40px;
             height: auto;
@@ -72,6 +93,10 @@
         }
 
         #clear-layers-btn:hover {
+            background-color: #cc0000;
+        }
+
+        #const-view-btn:hover {
             background-color: #cc0000;
         }
 
@@ -126,13 +151,14 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4leaflet/1.0.1/proj4leaflet.js"></script>
     <!-- ✅ Load Leaflet.js AFTER Proj4 and Proj4Leaflet -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <script defer src="script.js"></script>  <!-- Load our script.js -->
+    <script defer type="module" src="script.js"></script>  <!-- Load our script.js -->
 </head>
 <body>
     <div class="container">
         <!-- Sidebar for dataset selection -->
         <div class="sidebar">
             <button id="clear-layers-btn">Clear All Layers</button>
+            <button id="const-view-btn">View Constituencies</button>
             <div id="dataset-list"></div> <!-- Dataset buttons will be populated here -->
             <div id="data-controls"></div> <!-- Dynamic dataset toggles go here -->
         </div>

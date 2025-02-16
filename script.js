@@ -9,6 +9,8 @@ proj4.defs("EPSG:4326", "+proj=longlat +datum=WGS84 +no_defs");
 
 console.log("✅ Proj4 definitions loaded for EPSG:27700 and EPSG:4326");
 
+// ✅ Import Constituency Plotter Module
+import { loadAndPlotConstituencies } from "./Constituency_Plotter.js";
 
 //1️⃣ Initialise the map (Runs once)
 async function initialiseMap() {
@@ -520,8 +522,21 @@ document.addEventListener("DOMContentLoaded", async () => {
         console.error("❌ Clear All Layers button not found in DOM.");
     }
 
+    const { loadAndPlotConstituencies } = await import("./constituency_plotter.js");
+
+    // ✅ Ensure button exists
+    const toggleConstituenciesBtn = document.getElementById("const-view-btn");
+    if (toggleConstituenciesBtn) {
+        toggleConstituenciesBtn.addEventListener("click", () => {
+            console.log("🗺️ Toggling constituencies...");
+            loadAndPlotConstituencies(); // ✅ Call function when button is clicked
+        });
+    } else {
+        console.error("❌ Toggle Constituencies button not found in DOM.");
+    }
+
     initialiseMap();  // 🌍 Step 1: Start the map
     await populateDatasetList();  // 📋 Step 2: Populate dataset list
-    loadBoundaries(); // Step 3: Load Constituency Boundaries
+    //loadBoundaries(); // Step 3: Load Constituency Boundaries
 
 });
