@@ -7,6 +7,7 @@ bdline_gml3_gb/Data/INSPIRE_AdministrativeUnit.gml
 /Users/supriyarai/Code/ge-o_map/Map_JSON/13. National_Identity_by_Sex_and_Age.json
 Boundaries_JSON/
 static/epsg27700_boundaries.json
-
+/Users/supriyarai/Code/ge-o_map/westminster-parliamentary-constituencies.csv
+/Users/supriyarai/Code/ge-o_map/westminster-parliamentary-constituencies.geojson
 
 Map_JSON/*.json
