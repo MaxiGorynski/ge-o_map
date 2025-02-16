@@ -144,27 +144,27 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Dynamic Map</title>
+    <!-- ✅ Load Leaflet first -->
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
-    <!-- ✅ Load Proj4.js (Core Library) -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.9.1/proj4.js"></script>
-
-    <!-- ✅ Load Proj4Leaflet.js (Extends Leaflet with EPSG support) -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4leaflet/1.0.1/proj4leaflet.js"></script>
-
-    <!-- ✅ Load Leaflet.js AFTER Proj4 and Proj4Leaflet -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
-    <!-- ✅ Ensure Proj4 is exposed globally -->
+    <!-- ✅ Load Proj4.js BEFORE Proj4Leaflet -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4js/2.9.1/proj4.js"></script>
+
+    <!-- ✅ Load Proj4Leaflet AFTER Leaflet and Proj4 (NO defer) -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/proj4leaflet/1.0.1/proj4leaflet.js"></script>
+
     <script>
-        if (typeof proj4 === "undefined") {
-            console.error("❌ Proj4 did not load correctly!");
-        } else {
-            console.log("✅ Proj4 is loaded and available globally.");
-        }
+        console.log("✅ Checking Proj4 and Leaflet load order...");
+        if (typeof L === "undefined") console.error("❌ Leaflet is NOT loaded.");
+        else console.log("✅ Leaflet is loaded:", L.version);
+
+        if (typeof proj4 === "undefined") console.error("❌ Proj4 is NOT loaded.");
+        else console.log("✅ Proj4 is loaded.");
     </script>
 
-    <!-- ✅ Load main JavaScript (as a normal script, not a module) -->
-    <script defer src="script.js"></script>
+    <!-- ✅ Load the main script (without defer) -->
+    <script type="module" src="script.js"></script>
 </head>
 <body>
     <div class="container">

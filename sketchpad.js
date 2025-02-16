@@ -1,46 +1,30 @@
 let map;
 const layerGroups = {}; // Store dataset layers
 
+// ✅ Import Constituency Plotter Module
+import { loadAndPlotConstituencies } from "./Constituency_Plotter.js";
+
+// ✅ Define EPSG:27700 (British National Grid)
+proj4.defs("EPSG:27700", "+proj=tmerc +lat_0=49 +lon_0=-2 +k=0.9996012717 +x_0=400000 +y_0=-100000 +datum=OSGB36 +units=m +no_defs");
+
+// ✅ Define WGS84 (Standard Lat/Lon format)
+proj4.defs("EPSG:4326", "+proj=longlat +datum=WGS84 +no_defs");
+
+console.log("✅ Proj4 definitions loaded for EPSG:27700 and EPSG:4326");
+
 //1️⃣ Initialise the map (Runs once)
-// 🗺️ Initialise Map with EPSG:27700 (British National Grid)
-// 🗺️ Initialise Map with EPSG:27700 (British National Grid)
+async function initialiseMap() {
+    console.log("🗺️ Initialising Map...");
 
-function initialiseMap() {
-    console.log("🗺️ Initialising Map with EPSG:27700...");
-
-    // Ensure Proj4Leaflet is available
-    if (!L.Proj) {
-        console.error("❌ Proj4Leaflet is not loaded!");
-        return;
-    }
-
-    // Define EPSG:27700 Projection (British National Grid)
-    const epsg27700 = new L.Proj.CRS(
-        "EPSG:27700",
-        "+proj=tmerc +lat_0=49 +lon_0=-2 +k=0.9996012717 +x_0=400000 +y_0=-100000 +ellps=airy +datum=OSGB36 +units=m +no_defs",
-        {
-            resolutions: [8192, 4096, 2048, 1024, 512, 256, 128, 64, 32, 16, 8, 4, 2, 1, 0.5], // Zoom levels
-            origin: [0, 0]
-        }
-    );
-
-    // Create the map
-    const map = L.map("map", {
-        crs: epsg27700, // Apply EPSG:27700 projection
-        center: [55.3781, -3.4360], // Approx UK center in WGS84
-        zoom: 6
-    });
+    map = L.map("map").setView([55.3781, -3.4360], 6);
 
     L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
         maxZoom: 19,
         attribution: "© OpenStreetMap contributors",
     }).addTo(map);
 
-    console.log("✅ Map initialised with EPSG:27700!");
+    console.log("✅ Map initialised.");
 }
-
-
-
 
 // 2️⃣ Populate dataset list in the UI
 async function populateDatasetList() {
@@ -320,7 +304,89 @@ function getMagentaColour(value) {
     return `rgb(${r}, ${g}, ${b})`;
 }
 
-// 5️⃣ Remove dataset layer from the map, including "High" flags
+// ✅ Function to transform EPSG:27700 to WGS84 (Leaflet format)
+function transformCoords(easting, northing) {
+    try {
+        const [lon, lat] = proj4("EPSG:27700", "EPSG:4326", [easting, northing]);
+        return [lat, lon]; // Leaflet expects [lat, lon]
+    } catch (error) {
+        console.error(`❌ Coordinate transformation error: ${error}`);
+        return null;
+    }
+}
+
+async function loadBoundaries() {
+    console.log("📌 Fetching boundary file list...");
+
+    try {
+        // Step 1: Fetch the directory listing from the backend
+        const response = await fetch("/Boundaries_JSON/");
+        if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
+
+        const parser = new DOMParser();
+        const htmlText = await response.text();
+        const htmlDoc = parser.parseFromString(htmlText, "text/html");
+
+        // Step 2: Extract JSON filenames from the directory listing
+        const links = [...htmlDoc.querySelectorAll("a[href$='.json']")];
+        const boundaryFiles = links.map(link => `/Boundaries_JSON/${link.textContent}`);
+
+        console.log(`📌 Found ${boundaryFiles.length} boundary files. Starting loading process...`);
+
+        // Step 3: Load each boundary file and plot it
+        for (const file of boundaryFiles) {
+            try {
+                const boundaryResponse = await fetch(file);
+                if (!boundaryResponse.ok) throw new Error(`HTTP error! Status: ${boundaryResponse.status}`);
+
+                const boundaryData = await boundaryResponse.json();
+                plotBoundary(boundaryData); // ✅ Convert and plot
+
+            } catch (error) {
+                console.error(`❌ Error loading boundary file: ${file}`, error);
+            }
+        }
+
+        console.log("✅ All boundaries processed successfully.");
+
+    } catch (error) {
+        console.error("❌ Error fetching boundary files:", error);
+    }
+}
+
+
+
+async function plotBoundary(boundaryData) {
+    console.log("📌 Plotting boundary:", boundaryData);
+
+    if (!boundaryData.geometry || !boundaryData.geometry.coordinates) {
+        console.error("❌ Invalid boundary data format:", boundaryData);
+        return;
+    }
+
+    // 🔥 Convert all coordinate points using transformCoords
+    const transformedCoordinates = boundaryData.geometry.coordinates[0].map(coord => {
+        const [easting, northing] = coord;
+        const transformed = transformCoords(easting, northing);
+        console.log(`📍 Original: ${coord} → Transformed: ${transformed}`);
+        return transformed;
+    }).filter(Boolean); // Remove any null values from failed transformations
+
+    if (transformedCoordinates.length === 0) {
+        console.error("❌ No valid transformed coordinates found for:", boundaryData);
+        return;
+    }
+
+    // ✅ Plot transformed polygon on the map
+    const boundaryLayer = L.polygon(transformedCoordinates, {
+        color: "red",
+        weight: 2,
+        fillOpacity: 0.1
+    }).addTo(map);
+
+    console.log("✅ Boundary added:", boundaryLayer);
+}
+
 // 5️⃣ Remove dataset layer from the map, including "High" flags
 function removeLayerFromMap(dataset) {
     console.log(`🗑️ Removing layer for ${dataset}`);
@@ -440,91 +506,45 @@ function groupHeaders(headers) {
     return groups;
 }
 
-async function loadConstituencyBoundaries() {
-    console.log("📌 Loading constituency boundaries...");
-
-    try {
-        const response = await fetch("http://localhost:8000/static/epsg27700_boundaries.json");
-
-        console.log("📥 Response received:", response);
-
-        if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
-
-        const data = await response.json();
-        console.log(`✅ Successfully loaded ${data.features.length} constituency boundaries.`);
-
-        if (!data || !data.features || data.features.length === 0) {
-            console.warn("⚠️ No valid boundary data found!");
-            return;
-        }
-
-        // Define the conversion from EPSG:27700 (British Grid) to EPSG:4326 (WGS84)
-        const transformCoords = (coords) => {
-            const [easting, northing] = coords;
-            try {
-                const [lon, lat] = proj4("EPSG:27700", "EPSG:4326", [easting, northing]);
-                return new L.LatLng(lat, lon);
-            } catch (projError) {
-                console.error("❌ Projection error:", projError, "for coordinates:", coords);
-                return null;
-            }
-        };
-
-        // Create a Leaflet GeoJSON layer with transformed coordinates
-        const constituencyLayer = L.geoJSON(data, {
-            style: () => ({
-                color: "#ff6600", // Orange border
-                weight: 2,
-                fillOpacity: 0.1,
-            }),
-            coordsToLatLng: transformCoords // Convert EPSG:27700 to WGS84
-        });
-
-        constituencyLayer.addTo(map);
-        console.log("✅ Constituency boundaries successfully added to the map!");
-
-    } catch (error) {
-        console.error("❌ Error loading constituency boundaries:", error);
-    }
-}
-
-
-
 // 7️⃣ Run everything in the correct order when the page loads
 document.addEventListener("DOMContentLoaded", async () => {
     console.log("📌 DOM fully loaded. Initializing...");
 
-    function waitForProj4Leaflet(callback, retries = 5, delay = 1000) {
-        if (typeof L.Proj !== "undefined") {
-            console.log("✅ Proj4Leaflet loaded successfully.");
-            callback();
-        } else if (retries > 0) {
-            console.warn(`⏳ Proj4Leaflet not loaded, retrying in ${delay / 1000}s... (${retries} attempts left)`);
-            setTimeout(() => waitForProj4Leaflet(callback, retries - 1, delay), delay);
-        } else {
-            console.error("❌ Proj4Leaflet failed to load after multiple attempts.");
-        }
+    // ✅ Check if Proj4 and Leaflet are loaded before proceeding
+    if (typeof proj4 === "undefined" || typeof L === "undefined") {
+        console.error("❌ Leaflet and Proj4 must be loaded first! Retrying in 1 second...");
+        setTimeout(() => location.reload(), 1000); // Retry after 1 sec
+        return;
     }
 
-    waitForProj4Leaflet(() => {
-        initialiseMap();  // 🌍 Step 1: Initialize map
-    });
-
-    // ✅ Ensure "Clear All Layers" button exists before adding event listener
+    console.log("✅ Proj4 definitions loaded for EPSG:27700 and EPSG:4326");
+    // Ensure the Clear Layers button exists before adding the event listener
     const clearLayersBtn = document.getElementById("clear-layers-btn");
     if (clearLayersBtn) {
-        clearLayersBtn.addEventListener("click", () => {
-            clearAllLayers();
-            clearAllFlags(); // 🔥 Also clear all high-value flags
-        });
+        clearLayersBtn.addEventListener("click", clearAllLayers);
         console.log("🧹 Clear All Layers button event listener added.");
     } else {
         console.error("❌ Clear All Layers button not found in DOM.");
     }
 
+    try {
+        const { loadAndPlotConstituencies } = await import("./constituency_plotter.js");
+
+        // ✅ Ensure toggle button exists
+        const toggleConstituenciesBtn = document.getElementById("const-view-btn");
+        if (toggleConstituenciesBtn) {
+            toggleConstituenciesBtn.addEventListener("click", async () => {
+                console.log("🗺️ Toggling constituencies...");
+                await loadAndPlotConstituencies();
+            });
+        } else {
+            console.error("❌ Toggle Constituencies button not found in DOM.");
+        }
+    } catch (error) {
+        console.error("❌ Error importing constituency_plotter.js:", error);
+    }
+
+    initialiseMap();  // 🌍 Step 1: Start the map
     await populateDatasetList();  // 📋 Step 2: Populate dataset list
-    await loadConstituencyBoundaries(); // 🏛️ Step 3: Load boundary data
+
 });
-
-
-
