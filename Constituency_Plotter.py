@@ -1,18 +1,23 @@
 import pandas as pd
 import geopandas as gpd
-import matplotlib.pyplot as plt
+import json
+from shapely.geometry import shape
 
-# ✅ Load only the necessary columns
-df = pd.read_csv("/Users/supriyarai/Code/ge-o_map/westminster-parliamentary-constituencies.csv", usecols=["PCON22NM", "LONG", "LAT"])
+# ✅ Load CSV (Include "Geo Shape" for full constituency boundaries)
+df = pd.read_csv("/Users/supriyarai/Code/ge-o_map/westminster-parliamentary-constituencies.csv",
+                 usecols=["PCON22NM", "Geo Shape", "LONG", "LAT"])
 
-# ✅ Convert to GeoPandas
-gdf = gpd.GeoDataFrame(df, geometry=gpd.points_from_xy(df["LONG"], df["LAT"]), crs="EPSG:4326")
+# ✅ Convert "Geo Shape" from JSON to Shapely geometry
+df["geometry"] = df["Geo Shape"].apply(lambda x: shape(json.loads(x)) if isinstance(x, str) else None)
 
-# ✅ Plot the constituency locations
-fig, ax = plt.subplots(figsize=(10, 10))
-gdf.plot(ax=ax, color="red", markersize=5, alpha=0.7)
+# ✅ Convert DataFrame to GeoDataFrame
+gdf = gpd.GeoDataFrame(df, geometry="geometry", crs="EPSG:4326")
 
-plt.title("Westminster Parliamentary Constituency Centroids")
-plt.xlabel("Longitude")
-plt.ylabel("Latitude")
-plt.show()
+# ✅ Drop the old text-based "Geo Shape" column (now converted)
+gdf.drop(columns=["Geo Shape"], inplace=True)
+
+# ✅ Export as GeoJSON with correct format
+geojson_path = "/Users/supriyarai/Code/ge-o_map/westminster-parliamentary-constituencies.geojson"
+gdf.to_file(geojson_path, driver="GeoJSON")
+
+print(f"✅ GeoJSON successfully saved: {geojson_path}")

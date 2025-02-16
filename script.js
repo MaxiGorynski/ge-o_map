@@ -513,6 +513,14 @@ function groupHeaders(headers) {
 document.addEventListener("DOMContentLoaded", async () => {
     console.log("📌 DOM fully loaded. Initializing...");
 
+    // ✅ Check if Proj4 and Leaflet are loaded before proceeding
+    if (typeof proj4 === "undefined" || typeof L === "undefined") {
+        console.error("❌ Leaflet and Proj4 must be loaded first! Retrying in 1 second...");
+        setTimeout(() => location.reload(), 1000); // Retry after 1 sec
+        return;
+    }
+
+    console.log("✅ Proj4 definitions loaded for EPSG:27700 and EPSG:4326");
     // Ensure the Clear Layers button exists before adding the event listener
     const clearLayersBtn = document.getElementById("clear-layers-btn");
     if (clearLayersBtn) {
@@ -522,6 +530,7 @@ document.addEventListener("DOMContentLoaded", async () => {
         console.error("❌ Clear All Layers button not found in DOM.");
     }
 
+    // ✅ Import constituency module dynamically
     const { loadAndPlotConstituencies } = await import("./constituency_plotter.js");
 
     // ✅ Ensure button exists
@@ -529,7 +538,13 @@ document.addEventListener("DOMContentLoaded", async () => {
     if (toggleConstituenciesBtn) {
         toggleConstituenciesBtn.addEventListener("click", () => {
             console.log("🗺️ Toggling constituencies...");
-            loadAndPlotConstituencies(); // ✅ Call function when button is clicked
+
+            if (window.constituencyLayer && map.hasLayer(window.constituencyLayer)) {
+                map.removeLayer(window.constituencyLayer);
+                console.log("❌ Constituencies removed from map.");
+            } else {
+                loadAndPlotConstituencies(); // ✅ Call function when button is clicked
+            }
         });
     } else {
         console.error("❌ Toggle Constituencies button not found in DOM.");
@@ -537,6 +552,5 @@ document.addEventListener("DOMContentLoaded", async () => {
 
     initialiseMap();  // 🌍 Step 1: Start the map
     await populateDatasetList();  // 📋 Step 2: Populate dataset list
-    //loadBoundaries(); // Step 3: Load Constituency Boundaries
 
 });
