@@ -50,11 +50,11 @@ export async function loadAndPlotConstituencies() {
         if (validFeatures > 0) {
             console.log(`✅ Preparing to plot ${validFeatures} valid constituency polygons...`);
 
-            const constituencyGeoJsonLayer = L.geoJSON(
+            window.constituencyLayer = L.geoJSON(
                 { type: "FeatureCollection", features: geoJsonFeatures },
                 {
                     style: {
-                        color: "#ff0000",
+                        color: "#00f2ff",
                         weight: 2,
                         fillOpacity: 0.2
                     },
@@ -64,7 +64,12 @@ export async function loadAndPlotConstituencies() {
                         }
                     }
                 }
-            );
+            ).addTo(window.map);
+
+            // ✅ Ensure constituency layer stays behind markers
+            window.constituencyLayer.bringToBack();
+            console.log("✅ Constituency layer sent to back.");
+
 
             // ✅ Add to `window.constituencyLayer` instead of overwriting it
             window.constituencyLayer.addLayer(constituencyGeoJsonLayer);

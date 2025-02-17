@@ -268,6 +268,10 @@ function addLayerToMap(dataset, data) {
             // ✅ Always re-add marker to the layer group
             window.layerGroups[dataset].addLayer(window.markerMap[entry.OA_Code]);
 
+            // ✅ Ensure all markers always stay on top
+            window.markerMap[entry.OA_Code].bringToFront();
+            console.log(`📌 Marker for ${entry.OA_Code} brought to front.`);
+
             // ✅ Update dataset values for the marker
             window.markerMap[entry.OA_Code].datasetValues[dataset] = datasetValue;
 
