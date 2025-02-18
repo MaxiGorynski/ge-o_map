@@ -1,10 +1,10 @@
 import json
 import pandas as pd
+import os
 
-# ✅ Paths to source files
+# ✅ Paths
 csv_path = "/Users/supriyarai/Code/ge-o_map/oa_constituency_mapping.csv"
-json_path = "/Users/supriyarai/Code/ge-o_map/Map_JSON/19. British Sign Language (BSL) Skills by Age.json"
-output_json_path = "/Users/supriyarai/Code/ge-o_map/Map_JSON/19. British Sign Language (BSL) Skills by Age_Updated.json"
+json_dir = "/Users/supriyarai/Code/ge-o_map/Map_JSON/"
 
 # ✅ Load constituency mapping CSV
 print("📥 Loading constituency mapping CSV...")
@@ -19,28 +19,40 @@ if not set(df_constituency.columns).issuperset(expected_columns):
 oa_constituency_map = df_constituency.set_index("OA_Code")["Constituency"].to_dict()
 print(f"✅ Loaded {len(oa_constituency_map)} OA_Code → Constituency mappings.")
 
-# ✅ Load JSON dataset
-print("📥 Loading dataset JSON...")
-with open(json_path, "r", encoding="utf-8") as file:
-    json_data = json.load(file)
+# ✅ Process each JSON file in Map_JSON directory
+for filename in os.listdir(json_dir):
+    if filename.endswith(".json"):
+        json_path = os.path.join(json_dir, filename)
+        output_json_path = os.path.join(json_dir, filename.replace(".json", "_Updated.json"))
 
-# ✅ Merge constituency information into each entry
-updated_data = []
-for entry in json_data:
-    oa_code = entry.get("OA_Code")
+        print(f"📥 Processing: {filename}...")
 
-    if not oa_code:
-        print(f"⚠️ Missing OA_Code in entry: {entry}")
-        continue
+        # ✅ Load JSON dataset
+        with open(json_path, "r", encoding="utf-8") as file:
+            try:
+                json_data = json.load(file)
+            except json.JSONDecodeError:
+                print(f"❌ Error: Failed to parse {filename}, skipping.")
+                continue
 
-    # Assign the constituency name
-    entry["Constituency"] = oa_constituency_map.get(oa_code, "Unknown")
-    updated_data.append(entry)
+        # ✅ Merge constituency information
+        updated_data = []
+        for entry in json_data:
+            oa_code = entry.get("OA_Code")
 
-print(f"✅ Merged constituency names into {len(updated_data)} dataset entries.")
+            if not oa_code:
+                print(f"⚠️ Missing OA_Code in entry: {entry}")
+                continue
 
-# ✅ Save updated JSON
-with open(output_json_path, "w", encoding="utf-8") as file:
-    json.dump(updated_data, file, indent=4)
+            entry["Constituency"] = oa_constituency_map.get(oa_code, "Unknown")
+            updated_data.append(entry)
 
-print(f"📁 Saved updated JSON to {output_json_path}")
+        print(f"✅ Updated {len(updated_data)} entries in {filename}.")
+
+        # ✅ Save updated JSON
+        with open(output_json_path, "w", encoding="utf-8") as file:
+            json.dump(updated_data, file, indent=4)
+
+        print(f"📁 Saved updated JSON to {output_json_path}")
+
+print("🎉 All JSON files have been processed successfully!")

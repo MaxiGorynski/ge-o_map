@@ -93,8 +93,6 @@ async function populateDatasetList() {
 }
 
 
-
-
 // 3️⃣ Load dataset & show headers in a dropdown
 async function loadDataset(datasetUrl, key) {
     console.log(`📂 Attempting to load dataset: ${datasetUrl}`);
@@ -115,6 +113,14 @@ async function loadDataset(datasetUrl, key) {
         console.log(`✅ Successfully loaded ${key} (${data.length} entries)`);
         console.log("🔍 First entry:", data[0]);
 
+        // ✅ Check that `layerGroups` is defined
+        if (!window.layerGroups) {
+            console.warn("⚠️ `window.layerGroups` was undefined. Initializing now...");
+            window.layerGroups = {}; // ✅ Ensure it exists
+        }
+
+        console.log("   🔍 Checking dataset keys:", Object.keys(window.layerGroups));
+
         const datasetButton = document.querySelector(`button[data-dataset="${key}"]`);
         if (!datasetButton) {
             console.error(`❌ Button for dataset ${key} not found.`);
@@ -130,7 +136,7 @@ async function loadDataset(datasetUrl, key) {
 
         // 🔥 Extract and group dataset headers
         const headers = Object.keys(data[0]).filter(
-            key => key !== "OA_Code" && key !== "Latitude" && key !== "Longitude"
+            key => key !== "OA_Code" && key !== "Latitude" && key !== "Longitude" && key !== "Constituency"
         );
 
         const groupedHeaders = groupHeaders(headers);
@@ -163,7 +169,13 @@ async function loadDataset(datasetUrl, key) {
 
                 checkbox.addEventListener("change", () => {
                     console.log(`🔀 Checkbox changed: ${dataset}, Checked: ${checkbox.checked}`);
-                    console.log("   🔍 Checking dataset keys:", Object.keys(layerGroups));
+
+                    if (!window.layerGroups) {
+                        console.error("❌ `window.layerGroups` is unexpectedly undefined.");
+                        return;
+                    }
+
+                    console.log("   🔍 Checking dataset keys:", Object.keys(window.layerGroups));
 
                     if (checkbox.checked) {
                         console.log(`🟢 Adding dataset: ${dataset}`);
@@ -195,39 +207,7 @@ async function loadDataset(datasetUrl, key) {
     }
 }
 
-const markerMap = {}; // 🏷️ Global object to store markers by OA_Code
-
-async function loadOAConstituencyMapping() {
-    console.log("📌 Loading OA → Constituency mappings...");
-
-    try {
-        const response = await fetch("/final_oa_constituency_mapping.csv"); // Adjust path if needed
-        if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
-
-        const csvText = await response.text();
-        const rows = csvText.split("\n").slice(1); // Skip header
-
-        window.oaConstituencyMap = {}; // Global storage for quick lookups
-
-        rows.forEach(row => {
-            const [oaCode, lat, lon, constituency] = row.split(",");
-            if (oaCode) {
-                window.oaConstituencyMap[oaCode] = constituency?.trim() || "Unknown";
-            }
-        });
-
-        console.log(`✅ Loaded ${Object.keys(window.oaConstituencyMap).length} OA → Constituency mappings.`);
-    } catch (error) {
-        console.error("❌ Error loading OA → Constituency mapping:", error);
-    }
-}
-
-// ✅ Ensure OA constituency mapping is loaded before using addLayerToMap()
-if (!window.oaConstituencyMap) {
-    loadOAConstituencyMapping();
-}
-
-async function addLayerToMap(dataset, data) {
+function addLayerToMap(dataset, data) {
     console.log(`📌 Adding layer for ${dataset}`);
 
     if (!window.map) {
@@ -237,6 +217,7 @@ async function addLayerToMap(dataset, data) {
 
     if (!window.layerGroups) window.layerGroups = {};
     if (!window.markerMap) window.markerMap = {};
+    if (!window.flagMarkers) window.flagMarkers = {}; // ✅ Ensure flag storage is initialized
 
     if (!window.layerGroups[dataset]) {
         console.warn(`⚠️ layerGroups[${dataset}] was undefined. Initializing...`);
@@ -246,28 +227,14 @@ async function addLayerToMap(dataset, data) {
         window.layerGroups[dataset].clearLayers();
     }
 
-    // ✅ Verify OA → Constituency Mapping is available
-    if (!window.oaConstituencyMap) {
-        console.error("❌ ERROR: `window.oaConstituencyMap` is not loaded. Cannot assign constituencies.");
-        return;
-    }
-
-    console.log(`🗂️ Current layerGroups:`, Object.keys(window.layerGroups));
-
     const values = data
         .map(entry => parseFloat(entry[dataset]))
         .filter(value => !isNaN(value))
         .sort((a, b) => a - b);
 
-    if (values.length === 0) {
-        console.warn("⚠️ No valid numerical values found for dataset:", dataset);
-        return;
-    }
-
-    const minValue = values[0];
-    const maxValue = values[values.length - 1];
-    const top5Index = Math.max(0, Math.floor(values.length * 0.95) - 1);
-    const top5Threshold = values[top5Index] || maxValue;
+    const minValue = values.length ? values[0] : 0;
+    const maxValue = values.length ? values[values.length - 1] : 1;
+    const top5Threshold = values.length ? values[Math.floor(values.length * 0.95)] : 1; // ✅ 95th percentile threshold
 
     console.log(`📊 Min: ${minValue}, Max: ${maxValue}, 95th Percentile Threshold: ${top5Threshold}`);
 
@@ -275,41 +242,64 @@ async function addLayerToMap(dataset, data) {
         try {
             const lat = parseFloat(entry.Latitude);
             const lon = parseFloat(entry.Longitude);
-            const datasetValue = entry.hasOwnProperty(dataset) ? parseFloat(entry[dataset]) || 0 : 0;
+            const datasetValue = isNaN(parseFloat(entry[dataset])) ? 0 : parseFloat(entry[dataset]);
+            const constituencyName = entry.Constituency || "Unknown";
 
             if (isNaN(lat) || isNaN(lon)) {
                 console.warn("❌ Skipping invalid lat/lon:", entry);
                 return;
             }
 
-            const constituencyName = window.oaConstituencyMap[entry.OA_Code] || "Unknown";
+            let borderColor = getMagentaColour((datasetValue - minValue) / (maxValue - minValue || 1));
+            let innerColor = borderColor;
+
+            if (datasetValue === 0) {
+                borderColor = "#000000"; // Black stroke for zero-value markers
+                innerColor = getMagentaColour(0);
+            }
 
             if (!window.markerMap[entry.OA_Code]) {
+                console.log(`📍 Creating marker for OA_Code: ${entry.OA_Code} (${lat}, ${lon})`);
+
                 const marker = L.circleMarker([lat, lon], {
                     radius: 5,
-                    color: getMagentaColour((datasetValue - minValue) / (maxValue - minValue || 1)),
-                    fillColor: getMagentaColour((datasetValue - minValue) / (maxValue - minValue || 1)),
+                    color: borderColor,
+                    weight: 2,
+                    fillColor: innerColor,
                     fillOpacity: 0.8
                 });
 
                 marker.entry = entry;
                 marker.datasetValues = {};
                 window.markerMap[entry.OA_Code] = marker;
-
-                marker.bindPopup(`
-                    <b>OA Code:</b> ${entry.OA_Code} <br>
-                    <b>Constituency:</b> ${constituencyName} <br>
-                    ${Object.entries(marker.datasetValues)
-                        .map(([key, value]) => `<b>${key}:</b> ${value}`)
-                        .join("<br>")}
-                `);
-
                 window.layerGroups[dataset].addLayer(marker);
+
+                // ✅ If value is in top 5%, add a "High" flag
+                if (datasetValue >= top5Threshold) {
+                    placeHighValueFlag(lat, lon, dataset);
+                }
             }
 
-            // ✅ Corrected: Use existing marker, not redeclare it
             const marker = window.markerMap[entry.OA_Code];
+
+            if (!marker) {
+                console.error(`❌ Marker missing for OA_Code: ${entry.OA_Code}`);
+                return;
+            }
+
             marker.datasetValues[dataset] = datasetValue;
+
+            console.log(`🔹 Updated marker: ${entry.OA_Code}, Value: ${datasetValue}`);
+
+            const popupContent = `
+                <b>OA Code:</b> ${entry.OA_Code} <br>
+                <b>Constituency:</b> ${constituencyName} <br>
+                ${Object.entries(marker.datasetValues)
+                    .map(([key, value]) => `<b>${key}:</b> ${isNaN(value) ? "0" : value}`)
+                    .join("<br>")}
+            `;
+
+            marker.bindPopup(popupContent);
 
         } catch (markerError) {
             console.error(`❌ ERROR processing entry in ${dataset}:`, markerError, entry);
@@ -317,8 +307,8 @@ async function addLayerToMap(dataset, data) {
     });
 
     console.log(`🗂️ Layer Group Updated: ${dataset}`, window.layerGroups[dataset]);
-
 }
+
 
 
 const flagMarkers = {}; // Global storage for high-value flags

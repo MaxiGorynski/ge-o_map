@@ -1,6 +1,4 @@
-import * as turf from "@turf/turf";
-
-window.constituencyIndex = null; // Spatial Index for Fast Lookups
+window.constituencyData = []; // Store constituency boundaries globally
 
 export async function loadAndPlotConstituencies() {
     console.log("📌 Starting to load constituency data...");
@@ -25,8 +23,11 @@ export async function loadAndPlotConstituencies() {
             window.constituencyLayer.clearLayers();
         }
 
-        // ✅ Convert constituency polygons into a **spatial index for fast lookups**
-        window.constituencyIndex = turf.featureCollection(data.features);
+        // ✅ Store constituency polygons globally for reference
+        window.constituencyData = data.features.map(feature => ({
+            name: feature.properties.PCON22NM || "Unknown",
+            geometry: feature.geometry
+        }));
 
         let geoJsonFeatures = data.features.map(feature => ({
             type: "Feature",
