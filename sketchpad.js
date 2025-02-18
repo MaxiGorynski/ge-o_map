@@ -251,40 +251,114 @@ function addLayerToMap(dataset, data) {
                 return;
             }
 
-            // ✅ Check if marker already exists
+            // ✅ Ensure marker exists in markerMap
             if (!window.markerMap[entry.OA_Code]) {
-                const marker = L.circleMarker([lat, lon], {
+                // Create new marker if it doesn't exist
+                window.markerMap[entry.OA_Code] = L.circleMarker([lat, lon], {
                     radius: 5,
                     color: getMagentaColour((datasetValue - minValue) / (maxValue - minValue || 1)),
                     fillColor: getMagentaColour((datasetValue - minValue) / (maxValue - minValue || 1)),
                     fillOpacity: 0.8
                 });
 
-                marker.entry = entry;
-                marker.datasetValues = {}; // Store dataset values for multiple toggles
-                window.markerMap[entry.OA_Code] = marker;
-
-                // ✅ Ensure `layerGroups[dataset]` exists before adding a layer
-                if (!window.layerGroups[dataset]) {
-                    console.error(`❌ layerGroups[${dataset}] is undefined.`);
-                    return;
-                }
-
-                window.layerGroups[dataset].addLayer(marker);
+                window.markerMap[entry.OA_Code].entry = entry;
+                window.markerMap[entry.OA_Code].datasetValues = {};
             }
 
-            // ✅ Update marker
-            const marker = window.markerMap[entry.OA_Code];
-            marker.datasetValues[dataset] = datasetValue;
+            // ✅ Always re-add marker to the layer group
+            window.layerGroups[dataset].addLayer(window.markerMap[entry.OA_Code]);
 
-            // ✅ Update popup with all active datasets
-            const popupContent = `
-                <b>OA Code:</b> ${entry.OA_Code} <br>
-                ${Object.entries(marker.datasetValues)
-                    .map(([key, value]) => `<b>${key}:</b> ${value}`)
-                    .join("<br>")}
-            `;
-            marker.bindPopup(popupContent);
+            // ✅ Ensure all markers always stay on top
+            window.markerMap[entry.OA_Code].bringToFront();
+            console.log(`📌 Marker for ${entry.OA_Code} brought to front.`);
+
+            // ✅ Update dataset values for the marker
+            window.markerMap[entry.OA_Code].datasetValues[dataset] = datasetValue;
+
+            // ✅ Update popup
+            // ✅ Function to find the constituency a marker belongs to
+            function getConstituencyForPoint(lat, lon) {
+                const point = L.latLng(lat, lon);
+                let foundConstituency = "Unknown";
+
+                window.constituencyLayer.eachLayer(layer => {
+                    if (leafletPip.pointInLayer(point, layer).length) {
+                        foundConstituency = layer.feature.properties.PCON22NM || "Unknown";
+                    }
+                });
+
+                return foundConstituency;
+            }
+
+            // ✅ Modify the popup content in addLayerToMap()
+            data.forEach(entry => {
+                try {
+                    const lat = parseFloat(entry.Latitude);
+                    const lon = parseFloat(entry.Longitude);
+                    const datasetValue = parseFloat(entry[dataset]) || 0;
+
+                    if (isNaN(lat) || isNaN(lon)) {
+                        console.warn("❌ Skipping invalid lat/lon:", entry);
+                        return;
+                    }
+
+                    console.log("🔍 Entry before skipping:", entry);
+
+                    // ✅ Determine constituency for this marker
+                    const constituencyName = getConstituencyForPoint(lat, lon);
+                    console.log(`📌 Marker at (${lat}, ${lon}) belongs to: ${constituencyName}`);
+
+                    // ✅ Check if marker already exists
+                    if (!window.markerMap[entry.OA_Code]) {
+                        const marker = L.circleMarker([lat, lon], {
+                            radius: 5,
+                            color: getMagentaColour((datasetValue - minValue) / (maxValue - minValue || 1)),
+                            fillColor: getMagentaColour((datasetValue - minValue) / (maxValue - minValue || 1)),
+                            fillOpacity: 0.8
+                        });
+
+                        marker.entry = entry;
+                        marker.datasetValues = {}; // Store dataset values for multiple toggles
+                        marker.constituency = constituencyName; // ✅ Store constituency
+                        window.markerMap[entry.OA_Code] = marker;
+
+                        // ✅ Ensure `layerGroups[dataset]` exists before adding a layer
+                        if (!window.layerGroups[dataset]) {
+                            console.error(`❌ layerGroups[${dataset}] is undefined.`);
+                            return;
+                        }
+
+                        if (!marker) {
+                            console.error(`❌ marker is undefined for dataset: ${dataset}`);
+                            return;
+                        }
+
+                        window.layerGroups[dataset].addLayer(marker);
+                    }
+
+                    // ✅ Update marker with dataset values
+                    const marker = window.markerMap[entry.OA_Code];
+                    marker.datasetValues[dataset] = datasetValue;
+
+                    // ✅ Update popup with **both dataset & constituency name**
+                    const popupContent = `
+                        <b>OA Code:</b> ${entry.OA_Code} <br>
+                        <b>Constituency:</b> ${marker.constituency} <br>
+                        ${Object.entries(marker.datasetValues)
+                            .map(([key, value]) => `<b>${key}:</b> ${value}`)
+                            .join("<br>")}
+                    `;
+                    marker.bindPopup(popupContent);
+
+                    // ✅ Add a flag if this entry is in the top 5%
+                    if (datasetValue >= top5Threshold) {
+                        placeHighValueFlag(lat, lon);
+                    }
+
+                } catch (markerError) {
+                    console.error(`❌ Error processing entry in ${dataset}:`, markerError);
+                }
+            });
 
             // ✅ Add a flag if this entry is in the top 5%
             if (datasetValue >= top5Threshold) {
@@ -573,3 +647,96 @@ document.addEventListener("DOMContentLoaded", async () => {
     await populateDatasetList();  // 📋 Step 2: Populate dataset list
 
 });
+
+---------------
+
+// ✅ Global array to store constituency polygons for quick lookup
+window.constituencyPolygons = [];
+
+export async function loadAndPlotConstituencies() {
+    console.log("📌 Starting to load constituency data...");
+
+    if (!window.map) {
+        console.error("❌ Error: `window.map` is not defined. Cannot add constituency layers.");
+        return;
+    }
+
+    try {
+        // ✅ Fetch the GeoJSON data
+        const response = await fetch("/westminster-parliamentary-constituencies.geojson");
+        if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
+
+        const data = await response.json();
+        console.log(`✅ Successfully loaded ${data.features.length} constituencies.`);
+
+        // ✅ Store constituency geometries for later lookup
+        window.constituencyPolygons = data.features.map(feature => ({
+            name: feature.properties.PCON22NM || "Unknown",
+            geometry: feature.geometry
+        }));
+
+        let validFeatures = 0;
+        let geoJsonFeatures = [];
+
+        // ✅ Step 1: Iterate through each feature and validate
+        data.features.forEach((feature, index) => {
+            const { geometry, properties } = feature;
+
+            console.log(`🔍 Processing feature #${index + 1}:`, properties?.PCON22NM || "Unknown");
+
+            if (!geometry || !geometry.coordinates) {
+                console.warn(`⚠️ Skipping invalid geometry at index ${index}:`, feature);
+                return;
+            }
+
+            if (geometry.type !== "Polygon" && geometry.type !== "MultiPolygon") {
+                console.warn(`⚠️ Unexpected geometry type (${geometry.type}) at index ${index}:`, feature);
+                return;
+            }
+
+            geoJsonFeatures.push(feature);
+            validFeatures++;
+        });
+
+        // ✅ Step 2: Ensure we have valid data before creating the layer
+        if (validFeatures > 0) {
+            console.log(`✅ Preparing to plot ${validFeatures} valid constituency polygons...`);
+
+            // ✅ If the constituency layer exists, clear it
+            if (window.constituencyLayer) {
+                console.log("♻️ Clearing previous constituency layers...");
+                window.constituencyLayer.clearLayers();
+            } else {
+                console.log("ℹ️ Creating new constituencyLayer...");
+                window.constituencyLayer = L.geoJSON(null, {
+                    style: {
+                        color: "#00f2ff",
+                        weight: 2,
+                        fillOpacity: 0.2
+                    },
+                    onEachFeature: function (feature, layer) {
+                        if (feature.properties && feature.properties.PCON22NM) {
+                            layer.bindPopup(`<b>Constituency:</b> ${feature.properties.PCON22NM}`);
+                        }
+                    }
+                }).addTo(window.map);
+            }
+
+            // ✅ Add new GeoJSON features to the existing layer
+            window.constituencyLayer.addData({
+                type: "FeatureCollection",
+                features: geoJsonFeatures
+            });
+
+            // ✅ Ensure constituency layer stays behind markers
+            window.constituencyLayer.bringToBack();
+            console.log("✅ Constituency layer sent to back.");
+            console.log(`✅ Successfully plotted ${validFeatures} constituencies.`);
+        } else {
+            console.warn("⚠️ No valid constituency boundaries found.");
+        }
+
+    } catch (error) {
+        console.error("❌ Error loading constituency data:", error);
+    }
+}

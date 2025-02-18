@@ -195,35 +195,65 @@ async function loadDataset(datasetUrl, key) {
     }
 }
 
-
-
 const markerMap = {}; // 🏷️ Global object to store markers by OA_Code
 
-function addLayerToMap(dataset, data) {
+async function loadOAConstituencyMapping() {
+    console.log("📌 Loading OA → Constituency mappings...");
+
+    try {
+        const response = await fetch("/final_oa_constituency_mapping.csv"); // Adjust path if needed
+        if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
+
+        const csvText = await response.text();
+        const rows = csvText.split("\n").slice(1); // Skip header
+
+        window.oaConstituencyMap = {}; // Global storage for quick lookups
+
+        rows.forEach(row => {
+            const [oaCode, lat, lon, constituency] = row.split(",");
+            if (oaCode) {
+                window.oaConstituencyMap[oaCode] = constituency?.trim() || "Unknown";
+            }
+        });
+
+        console.log(`✅ Loaded ${Object.keys(window.oaConstituencyMap).length} OA → Constituency mappings.`);
+    } catch (error) {
+        console.error("❌ Error loading OA → Constituency mapping:", error);
+    }
+}
+
+// ✅ Ensure OA constituency mapping is loaded before using addLayerToMap()
+if (!window.oaConstituencyMap) {
+    loadOAConstituencyMapping();
+}
+
+async function addLayerToMap(dataset, data) {
     console.log(`📌 Adding layer for ${dataset}`);
 
-    // ✅ Ensure `window.map` exists
     if (!window.map) {
-        console.error("❌ ERROR: `window.map` is not defined. Cannot proceed with addLayerToMap.");
+        console.error("❌ ERROR: `window.map` is not defined. Cannot proceed.");
         return;
     }
 
-    // ✅ Ensure `layerGroups` and `markerMap` are initialized
     if (!window.layerGroups) window.layerGroups = {};
     if (!window.markerMap) window.markerMap = {};
 
-    // ✅ Initialize the dataset layer if it doesn't exist
     if (!window.layerGroups[dataset]) {
         console.warn(`⚠️ layerGroups[${dataset}] was undefined. Initializing...`);
-        window.layerGroups[dataset] = L.layerGroup().addTo(window.map); // ✅ Store in global layerGroups
+        window.layerGroups[dataset] = L.layerGroup().addTo(window.map);
     } else {
-        console.log(`♻️ Dataset layer "${dataset}" already exists. Clearing old markers...`);
+        console.log(`♻️ Clearing existing dataset layer: ${dataset}`);
         window.layerGroups[dataset].clearLayers();
     }
 
-    console.log("🗂️ Current layerGroups:", Object.keys(window.layerGroups));
+    // ✅ Verify OA → Constituency Mapping is available
+    if (!window.oaConstituencyMap) {
+        console.error("❌ ERROR: `window.oaConstituencyMap` is not loaded. Cannot assign constituencies.");
+        return;
+    }
 
-    // ✅ Extract numerical values for dataset scaling
+    console.log(`🗂️ Current layerGroups:`, Object.keys(window.layerGroups));
+
     const values = data
         .map(entry => parseFloat(entry[dataset]))
         .filter(value => !isNaN(value))
@@ -236,7 +266,8 @@ function addLayerToMap(dataset, data) {
 
     const minValue = values[0];
     const maxValue = values[values.length - 1];
-    const top5Threshold = values[Math.floor(values.length * 0.95)]; // 95th percentile value
+    const top5Index = Math.max(0, Math.floor(values.length * 0.95) - 1);
+    const top5Threshold = values[top5Index] || maxValue;
 
     console.log(`📊 Min: ${minValue}, Max: ${maxValue}, 95th Percentile Threshold: ${top5Threshold}`);
 
@@ -244,59 +275,51 @@ function addLayerToMap(dataset, data) {
         try {
             const lat = parseFloat(entry.Latitude);
             const lon = parseFloat(entry.Longitude);
-            const datasetValue = parseFloat(entry[dataset]) || 0;
+            const datasetValue = entry.hasOwnProperty(dataset) ? parseFloat(entry[dataset]) || 0 : 0;
 
             if (isNaN(lat) || isNaN(lon)) {
                 console.warn("❌ Skipping invalid lat/lon:", entry);
                 return;
             }
 
-            // ✅ Ensure marker exists in markerMap
+            const constituencyName = window.oaConstituencyMap[entry.OA_Code] || "Unknown";
+
             if (!window.markerMap[entry.OA_Code]) {
-                // Create new marker if it doesn't exist
-                window.markerMap[entry.OA_Code] = L.circleMarker([lat, lon], {
+                const marker = L.circleMarker([lat, lon], {
                     radius: 5,
                     color: getMagentaColour((datasetValue - minValue) / (maxValue - minValue || 1)),
                     fillColor: getMagentaColour((datasetValue - minValue) / (maxValue - minValue || 1)),
                     fillOpacity: 0.8
                 });
 
-                window.markerMap[entry.OA_Code].entry = entry;
-                window.markerMap[entry.OA_Code].datasetValues = {};
+                marker.entry = entry;
+                marker.datasetValues = {};
+                window.markerMap[entry.OA_Code] = marker;
+
+                marker.bindPopup(`
+                    <b>OA Code:</b> ${entry.OA_Code} <br>
+                    <b>Constituency:</b> ${constituencyName} <br>
+                    ${Object.entries(marker.datasetValues)
+                        .map(([key, value]) => `<b>${key}:</b> ${value}`)
+                        .join("<br>")}
+                `);
+
+                window.layerGroups[dataset].addLayer(marker);
             }
 
-            // ✅ Always re-add marker to the layer group
-            window.layerGroups[dataset].addLayer(window.markerMap[entry.OA_Code]);
-
-            // ✅ Ensure all markers always stay on top
-            window.markerMap[entry.OA_Code].bringToFront();
-            console.log(`📌 Marker for ${entry.OA_Code} brought to front.`);
-
-            // ✅ Update dataset values for the marker
-            window.markerMap[entry.OA_Code].datasetValues[dataset] = datasetValue;
-
-            // ✅ Update popup
-            const popupContent = `
-                <b>OA Code:</b> ${entry.OA_Code} <br>
-                ${Object.entries(window.markerMap[entry.OA_Code].datasetValues)
-                    .map(([key, value]) => `<b>${key}:</b> ${value}`)
-                    .join("<br>")}
-            `;
-            window.markerMap[entry.OA_Code].bindPopup(popupContent);
-
-
-            // ✅ Add a flag if this entry is in the top 5%
-            if (datasetValue >= top5Threshold) {
-                placeHighValueFlag(lat, lon);
-            }
+            // ✅ Corrected: Use existing marker, not redeclare it
+            const marker = window.markerMap[entry.OA_Code];
+            marker.datasetValues[dataset] = datasetValue;
 
         } catch (markerError) {
-            console.error(`❌ Error processing entry in ${dataset}:`, markerError);
+            console.error(`❌ ERROR processing entry in ${dataset}:`, markerError, entry);
         }
     });
 
-    console.log(`🗂️ Layer Group Updated: ${dataset}`, Object.keys(window.layerGroups));
+    console.log(`🗂️ Layer Group Updated: ${dataset}`, window.layerGroups[dataset]);
+
 }
+
 
 const flagMarkers = {}; // Global storage for high-value flags
 

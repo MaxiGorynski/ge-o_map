@@ -1,3 +1,7 @@
+import * as turf from "@turf/turf";
+
+window.constituencyIndex = null; // Spatial Index for Fast Lookups
+
 export async function loadAndPlotConstituencies() {
     console.log("📌 Starting to load constituency data...");
 
@@ -7,14 +11,12 @@ export async function loadAndPlotConstituencies() {
     }
 
     try {
-        // ✅ Fetch the GeoJSON data
         const response = await fetch("/westminster-parliamentary-constituencies.geojson");
         if (!response.ok) throw new Error(`HTTP error! Status: ${response.status}`);
 
         const data = await response.json();
         console.log(`✅ Successfully loaded ${data.features.length} constituencies.`);
 
-        // ✅ Step 1: Ensure global constituencyLayer is properly initialized
         if (!window.constituencyLayer) {
             console.log("ℹ️ Creating new constituencyLayer...");
             window.constituencyLayer = L.layerGroup().addTo(window.map);
@@ -23,61 +25,33 @@ export async function loadAndPlotConstituencies() {
             window.constituencyLayer.clearLayers();
         }
 
-        let validFeatures = 0;
-        let geoJsonFeatures = [];
+        // ✅ Convert constituency polygons into a **spatial index for fast lookups**
+        window.constituencyIndex = turf.featureCollection(data.features);
 
-        // ✅ Step 2: Iterate through each feature and validate
-        data.features.forEach((feature, index) => {
-            const { geometry, properties } = feature;
+        let geoJsonFeatures = data.features.map(feature => ({
+            type: "Feature",
+            properties: { name: feature.properties.PCON22NM || "Unknown" },
+            geometry: feature.geometry
+        }));
 
-            console.log(`🔍 Processing feature #${index + 1}:`, properties?.PCON22NM || "Unknown");
-
-            if (!geometry || !geometry.coordinates) {
-                console.warn(`⚠️ Skipping invalid geometry at index ${index}:`, feature);
-                return;
-            }
-
-            if (geometry.type !== "Polygon" && geometry.type !== "MultiPolygon") {
-                console.warn(`⚠️ Unexpected geometry type (${geometry.type}) at index ${index}:`, feature);
-                return;
-            }
-
-            geoJsonFeatures.push(feature);
-            validFeatures++;
-        });
-
-        // ✅ Step 3: Ensure we have valid data before creating the layer
-        if (validFeatures > 0) {
-            console.log(`✅ Preparing to plot ${validFeatures} valid constituency polygons...`);
-
-            window.constituencyLayer = L.geoJSON(
-                { type: "FeatureCollection", features: geoJsonFeatures },
-                {
-                    style: {
-                        color: "#00f2ff",
-                        weight: 2,
-                        fillOpacity: 0.2
-                    },
-                    onEachFeature: function (feature, layer) {
-                        if (feature.properties && feature.properties.PCON22NM) {
-                            layer.bindPopup(`<b>Constituency:</b> ${feature.properties.PCON22NM}`);
-                        }
+        window.constituencyLayer = L.geoJSON(
+            { type: "FeatureCollection", features: geoJsonFeatures },
+            {
+                style: {
+                    color: "#00f2ff",
+                    weight: 2,
+                    fillOpacity: 0.2
+                },
+                onEachFeature: function (feature, layer) {
+                    if (feature.properties && feature.properties.name) {
+                        layer.bindPopup(`<b>Constituency:</b> ${feature.properties.name}`);
                     }
                 }
-            ).addTo(window.map);
+            }
+        ).addTo(window.map);
 
-            // ✅ Ensure constituency layer stays behind markers
-            window.constituencyLayer.bringToBack();
-            console.log("✅ Constituency layer sent to back.");
-
-
-            // ✅ Add to `window.constituencyLayer` instead of overwriting it
-            window.constituencyLayer.addLayer(constituencyGeoJsonLayer);
-
-            console.log("✅ Successfully plotted all constituencies.");
-        } else {
-            console.warn("⚠️ No valid constituency boundaries found.");
-        }
+        window.constituencyLayer.bringToBack();
+        console.log("✅ Constituency layer sent to back.");
 
     } catch (error) {
         console.error("❌ Error loading constituency data:", error);
